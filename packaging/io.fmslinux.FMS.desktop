@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=FMS
+GenericName=FM Step Sequencer
+Comment=Five-track FM and PSG noise sequencer
+Exec=fms-linux
+Icon=io.fmslinux.FMS
+Terminal=false
+Categories=AudioVideo;Audio;Music;
+Keywords=synthesizer;sequencer;tracker;FM;chiptune;
+StartupWMClass=fms-linux

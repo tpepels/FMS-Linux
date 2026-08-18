@@ -1,0 +1,9 @@
+fms-linux
+fms-tests
+fms-persistence-tests
+fms-audio-tests
+fms-ui-tests
+fms-ui.bmp
+src/*.o
+src/*.d
+*.fms

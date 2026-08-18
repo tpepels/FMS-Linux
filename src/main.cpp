@@ -1,0 +1,242 @@
+#include "audio.hpp"
+#include "model.hpp"
+#include "persistence.hpp"
+#include "ui.hpp"
+
+#include <SDL.h>
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <memory>
+#include <string>
+#include <utility>
+
+namespace {
+
+struct Options {
+    bool help = false;
+    bool startPlaying = false;
+    bool noAudio = false;
+    bool audioSmoke = false;
+    double runForSeconds = 0.0;
+    std::string screenshot;
+    std::string savePath;
+    std::string error;
+};
+
+Options parseOptions(int argc, char** argv) {
+    Options options;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) options.help = true;
+        else if (std::strcmp(argv[i], "--play") == 0) options.startPlaying = true;
+        else if (std::strcmp(argv[i], "--no-audio") == 0) options.noAudio = true;
+        else if (std::strcmp(argv[i], "--audio-smoke") == 0) {
+            options.audioSmoke = true;
+        }
+        else if (std::strcmp(argv[i], "--run-for") == 0) {
+            if (i + 1 >= argc) {
+                options.error = "--run-for requires a number of seconds";
+                break;
+            }
+            char* end = nullptr;
+            const double seconds = std::strtod(argv[++i], &end);
+            if (end == argv[i] || *end != '\0' || !std::isfinite(seconds) || seconds < 0.0) {
+                options.error = "invalid --run-for value: " + std::string(argv[i]);
+                break;
+            }
+            options.runForSeconds = seconds;
+        }
+        else if (std::strcmp(argv[i], "--screenshot") == 0) {
+            if (i + 1 >= argc) {
+                options.error = "--screenshot requires a file path";
+                break;
+            }
+            options.screenshot = argv[++i];
+        }
+        else if (std::strcmp(argv[i], "--save-path") == 0) {
+            if (i + 1 >= argc) {
+                options.error = "--save-path requires a file path";
+                break;
+            }
+            options.savePath = argv[++i];
+        }
+        else {
+            options.error = "unknown option: " + std::string(argv[i]);
+            break;
+        }
+    }
+    if (options.audioSmoke) {
+        options.startPlaying = true;
+        options.runForSeconds = 0.35;
+    }
+    return options;
+}
+
+void printUsage() {
+    std::puts(
+        "FMS Linux - native FM step sequencer\n\n"
+        "Usage: fms-linux [options]\n"
+        "  --play             start the transport on launch\n"
+        "  --no-audio         disable audio initialization\n"
+        "  --run-for SEC      close automatically after SEC seconds\n"
+        "  --audio-smoke      run a short dummy-driver-friendly audio check\n"
+        "  --screenshot FILE  render one frame to a BMP and exit\n"
+        "  --save-path FILE   override the XDG save location\n"
+        "  -h, --help         show this help");
+}
+
+bool saveScreenshot(SDL_Renderer* renderer, int width, int height, const std::string& path) {
+    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888);
+    if (!surface) return false;
+    const bool ok = SDL_RenderReadPixels(renderer, nullptr, SDL_PIXELFORMAT_ARGB8888,
+                                          surface->pixels, surface->pitch) == 0 &&
+                    SDL_SaveBMP(surface, path.c_str()) == 0;
+    SDL_FreeSurface(surface);
+    return ok;
+}
+
+fms::AppState copyForSave(const fms::SharedState& shared) {
+    std::lock_guard<std::mutex> lock(shared.mutex);
+    return shared.app;
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+    const Options options = parseOptions(argc, argv);
+    if (!options.error.empty()) {
+        std::fprintf(stderr, "FMS: %s\n", options.error.c_str());
+        printUsage();
+        return 64;
+    }
+    if (options.help) {
+        printUsage();
+        return 0;
+    }
+    const std::uint32_t sdlFlags = SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER |
+                                   (options.noAudio ? 0u : SDL_INIT_AUDIO);
+    if (SDL_Init(sdlFlags) != 0) {
+        std::fprintf(stderr, "FMS: SDL initialization failed: %s\n", SDL_GetError());
+        return 1;
+    }
+
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
+    SDL_Window* window = SDL_CreateWindow(
+        "FMS — native FM step sequencer", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+        1280, 760, SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+    if (!window) {
+        std::fprintf(stderr, "FMS: could not create a window: %s\n", SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
+    SDL_SetWindowMinimumSize(window, 960, 570);
+
+    SDL_Renderer* renderer = SDL_CreateRenderer(
+        window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    if (!renderer) renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+    if (!renderer) {
+        std::fprintf(stderr, "FMS: could not create a renderer: %s\n", SDL_GetError());
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+    fms::SharedState shared;
+    shared.app = fms::makeDefaultState();
+    const std::string savePath = options.savePath.empty() ? fms::defaultSavePath() : options.savePath;
+    std::string loadError;
+    fms::AppState loaded;
+    if (fms::loadState(loaded, savePath, loadError)) shared.app = std::move(loaded);
+    bool allowAutoSave = loadError.empty();
+
+    fms::AudioEngine audio;
+    const bool audioReady = options.noAudio ? false : audio.open(shared);
+    auto ui = std::make_unique<fms::UiController>(shared, audio);
+    if (!audioReady && !options.noAudio) ui->showToast("AUDIO OFFLINE - " + audio.error(), true);
+    if (!loadError.empty()) {
+        std::fprintf(stderr, "FMS: %s; preserving the unreadable save file\n", loadError.c_str());
+        ui->showToast("SAVE FILE ERROR - AUTOSAVE DISABLED", true);
+    }
+    if (options.startPlaying && audioReady) audio.setRunning(true);
+
+    bool running = true;
+    int exitCode = 0;
+    const auto started = std::chrono::steady_clock::now();
+    auto previous = std::chrono::steady_clock::now();
+    while (running) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) running = false;
+            else if (!ui->handleEvent(event)) running = false;
+        }
+
+        const auto now = std::chrono::steady_clock::now();
+        const double delta = std::chrono::duration<double>(now - previous).count();
+        previous = now;
+        ui->update(std::min(delta, 0.1));
+
+        int width = 0;
+        int height = 0;
+        SDL_GetRendererOutputSize(renderer, &width, &height);
+        ui->render(renderer, width, height);
+
+        if (!options.screenshot.empty()) {
+            if (!saveScreenshot(renderer, width, height, options.screenshot)) {
+                std::fprintf(stderr, "FMS: screenshot failed: %s\n", SDL_GetError());
+                exitCode = 3;
+                running = false;
+            } else {
+                running = false;
+            }
+        }
+        SDL_RenderPresent(renderer);
+
+        if (ui->consumeSaveRequest()) {
+            std::string error;
+            const fms::AppState saveSnapshot = copyForSave(shared);
+            const bool saved = fms::saveState(saveSnapshot, savePath, error);
+            if (saved) allowAutoSave = true;
+            if (saved) ui->showToast("SAVED");
+            else ui->showToast("SAVE FAILED - " + error, true);
+        }
+
+        if (options.runForSeconds > 0.0 &&
+            std::chrono::duration<double>(now - started).count() >= options.runForSeconds) {
+            running = false;
+        }
+    }
+
+    if (options.audioSmoke) {
+        const fms::TransportStatus status = audio.status();
+        const float peak = std::max(std::abs(status.peakLeft), std::abs(status.peakRight));
+        const bool playheadAdvanced = std::any_of(
+            status.playheads.begin(), status.playheads.end(), [](int step) { return step >= 0; });
+        if (!audioReady || status.renderedFrames == 0 ||
+            !std::isfinite(status.peakLeft) || !std::isfinite(status.peakRight) ||
+            peak <= 0.000001f || !status.running || !playheadAdvanced) {
+            std::fprintf(stderr, "FMS: audio smoke test failed (%llu frames, peaks %.3f/%.3f)\n",
+                         static_cast<unsigned long long>(status.renderedFrames),
+                         static_cast<double>(status.peakLeft), static_cast<double>(status.peakRight));
+            exitCode = 2;
+        }
+    }
+
+    if (allowAutoSave) {
+        std::string error;
+        const fms::AppState saveSnapshot = copyForSave(shared);
+        if (!fms::saveState(saveSnapshot, savePath, error) && !error.empty()) {
+            std::fprintf(stderr, "FMS: %s\n", error.c_str());
+        }
+    }
+    ui.reset();
+    audio.close();
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return exitCode;
+}
