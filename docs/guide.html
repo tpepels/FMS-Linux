@@ -1,0 +1,1282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="An interactive field guide for the FMS Linux native FM step sequencer.">
+  <link rel="icon" href="../packaging/io.fmslinux.FMS.svg" type="image/svg+xml">
+  <title>FMS Linux Field Guide</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #e8ead8;
+      --muted: #9ca69f;
+      --faint: #63706b;
+      --paper: #080d10;
+      --paper-raised: #10191b;
+      --panel: #0d1517;
+      --line: #314440;
+      --line-strong: #52706a;
+      --lime: #8ef48b;
+      --aqua: #64e2dc;
+      --sun: #f6c966;
+      --coral: #f28b77;
+      --shadow: rgba(0, 0, 0, 0.32);
+      --pixel: "IBM Plex Mono", "Fira Mono", "DejaVu Sans Mono", monospace;
+      --reading: "Atkinson Hyperlegible", "Aptos", "Segoe UI", sans-serif;
+    }
+
+    [data-theme="light"] {
+      color-scheme: light;
+      --ink: #18231f;
+      --muted: #53645d;
+      --faint: #718078;
+      --paper: #e7e9df;
+      --paper-raised: #f0f1e8;
+      --panel: #e9ece2;
+      --line: #b5c0b6;
+      --line-strong: #778a7e;
+      --lime: #1b8141;
+      --aqua: #007d81;
+      --sun: #996300;
+      --coral: #ae4232;
+      --shadow: rgba(35, 48, 42, 0.13);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      color: var(--ink);
+      background-color: var(--paper);
+      background-image:
+        linear-gradient(rgba(127, 162, 149, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(127, 162, 149, 0.035) 1px, transparent 1px);
+      background-size: 28px 28px;
+      font-family: var(--reading);
+      line-height: 1.58;
+    }
+    a { color: inherit; }
+    button, input { font: inherit; }
+    button {
+      min-height: 36px;
+      border: 1px solid var(--line-strong);
+      border-radius: 4px;
+      color: var(--ink);
+      background: transparent;
+      cursor: pointer;
+      transition: background-color 130ms ease, color 130ms ease, border-color 130ms ease, transform 130ms ease;
+    }
+    button:hover, button:focus-visible {
+      border-color: var(--lime);
+      background: color-mix(in srgb, var(--lime) 12%, transparent);
+      outline: none;
+    }
+    button:active { transform: translateY(1px); }
+    kbd {
+      display: inline-flex;
+      min-width: 1.8em;
+      min-height: 1.7em;
+      align-items: center;
+      justify-content: center;
+      margin: 0 0.1em;
+      padding: 0.08em 0.38em;
+      border: 1px solid var(--line-strong);
+      border-bottom-width: 2px;
+      border-radius: 3px;
+      color: var(--aqua);
+      background: var(--paper-raised);
+      font-family: var(--pixel);
+      font-size: 0.78em;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    code {
+      padding: 0.1em 0.28em;
+      border-radius: 2px;
+      color: var(--sun);
+      background: color-mix(in srgb, var(--sun) 9%, transparent);
+      font-family: var(--pixel);
+      font-size: 0.88em;
+    }
+    pre {
+      overflow-x: auto;
+      margin: 1rem 0;
+      padding: 1rem 1.15rem;
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--aqua);
+      border-radius: 4px;
+      background: var(--panel);
+      box-shadow: 0 12px 26px var(--shadow);
+    }
+    pre code { padding: 0; color: var(--ink); background: transparent; }
+    .skip-link {
+      position: fixed;
+      z-index: 10;
+      top: 0.5rem;
+      left: 0.5rem;
+      transform: translateY(-160%);
+      padding: 0.5rem 0.7rem;
+      border: 1px solid var(--lime);
+      border-radius: 4px;
+      background: var(--paper-raised);
+      font-family: var(--pixel);
+    }
+    .skip-link:focus { transform: translateY(0); }
+    .shell { display: grid; grid-template-columns: minmax(195px, 16rem) minmax(0, 1fr); min-height: 100vh; }
+    .rail {
+      position: sticky;
+      top: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      padding: 1.4rem 1rem 1.2rem;
+      border-right: 1px solid var(--line);
+      background: color-mix(in srgb, var(--paper) 92%, transparent);
+      backdrop-filter: blur(12px);
+    }
+    .brand { display: flex; align-items: center; gap: 0.72rem; padding: 0.15rem 0.25rem 1.25rem; text-decoration: none; }
+    .brand img { width: 35px; height: 35px; image-rendering: pixelated; }
+    .brand-title { display: block; font-family: var(--pixel); font-size: 0.95rem; font-weight: 700; letter-spacing: 0.08em; }
+    .brand-subtitle { display: block; color: var(--muted); font-family: var(--pixel); font-size: 0.66rem; letter-spacing: 0.1em; }
+    .rail nav { overflow-y: auto; margin: 0.25rem -0.2rem 1rem; padding: 0 0.2rem; }
+    .rail nav a {
+      display: block;
+      padding: 0.37rem 0.48rem;
+      border-left: 2px solid transparent;
+      color: var(--muted);
+      font-family: var(--pixel);
+      font-size: 0.72rem;
+      letter-spacing: 0.04em;
+      text-decoration: none;
+    }
+    .rail nav a:hover, .rail nav a:focus-visible, .rail nav a[aria-current="true"] { border-left-color: var(--lime); color: var(--ink); outline: none; }
+    .rail-tools { display: grid; gap: 0.55rem; margin-top: auto; }
+    .rail-tools button { width: 100%; padding: 0.35rem 0.5rem; font-family: var(--pixel); font-size: 0.68rem; letter-spacing: 0.04em; text-align: left; }
+    .main { min-width: 0; }
+    .topline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 1rem 2rem 0;
+      color: var(--muted);
+      font-family: var(--pixel);
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+    }
+    .signal { display: inline-flex; align-items: center; gap: 0.45rem; }
+    .signal::before {
+      width: 0.56rem;
+      height: 0.56rem;
+      border-radius: 50%;
+      background: var(--lime);
+      box-shadow: 0 0 0.6rem color-mix(in srgb, var(--lime) 62%, transparent);
+      content: "";
+    }
+    .guide-section { max-width: 1120px; margin: 0 auto; padding: 4.7rem 2rem; scroll-margin-top: 1rem; }
+    .guide-section + .guide-section { border-top: 1px solid var(--line); }
+    .eyebrow { margin: 0 0 0.7rem; color: var(--lime); font-family: var(--pixel); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+    h1, h2, h3 { margin: 0; font-family: var(--pixel); font-weight: 700; letter-spacing: 0.02em; line-height: 1.16; }
+    h1 { max-width: 13ch; font-size: clamp(2.25rem, 5vw, 4.9rem); }
+    h2 { font-size: clamp(1.65rem, 3.3vw, 2.85rem); }
+    h3 { font-size: 0.98rem; }
+    p { max-width: 72ch; margin: 0.9rem 0; }
+    .lede { max-width: 60ch; color: var(--muted); font-size: clamp(1rem, 1.5vw, 1.24rem); }
+    .intro-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(16rem, 0.72fr); gap: clamp(1.5rem, 4vw, 4rem); align-items: end; }
+    .stat-list { display: grid; gap: 0; margin: 0; border-top: 1px solid var(--line); }
+    .stat-list div { display: grid; grid-template-columns: 3rem 1fr; gap: 0.85rem; padding: 0.65rem 0; border-bottom: 1px solid var(--line); }
+    .stat-list dt { color: var(--aqua); font-family: var(--pixel); font-size: 0.7rem; font-weight: 700; }
+    .stat-list dd { margin: 0; color: var(--muted); font-size: 0.92rem; }
+    .product-shot { margin: 2.8rem 0 0; }
+    .product-shot img { display: block; width: 100%; border: 1px solid var(--line-strong); image-rendering: pixelated; box-shadow: 0 18px 40px var(--shadow); }
+    .product-shot figcaption { display: flex; justify-content: space-between; gap: 1rem; padding-top: 0.55rem; color: var(--muted); font-family: var(--pixel); font-size: 0.66rem; letter-spacing: 0.06em; }
+    .product-shot figcaption strong { color: var(--aqua); }
+    .jump-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.6rem; }
+    .jump-row a { padding: 0.4rem 0.62rem; border: 1px solid var(--line); border-radius: 4px; color: var(--ink); font-family: var(--pixel); font-size: 0.72rem; letter-spacing: 0.04em; text-decoration: none; }
+    .jump-row a:hover, .jump-row a:focus-visible { border-color: var(--aqua); color: var(--aqua); outline: none; }
+    .section-head { margin-bottom: 2rem; }
+    .section-head > p:last-child { color: var(--muted); }
+    .lab { border: 1px solid var(--line-strong); border-radius: 6px; background: var(--panel); box-shadow: 0 18px 40px var(--shadow); overflow: hidden; }
+    .lab-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.72rem 0.9rem; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--paper-raised) 82%, transparent); }
+    .lab-title { color: var(--muted); font-family: var(--pixel); font-size: 0.72rem; letter-spacing: 0.08em; }
+    .transport { display: flex; align-items: center; gap: 0.45rem; }
+    .transport button { min-height: 29px; padding: 0.2rem 0.5rem; color: var(--aqua); font-family: var(--pixel); font-size: 0.68rem; }
+    .transport input { width: 4.4rem; min-height: 29px; border: 1px solid var(--line); border-radius: 3px; color: var(--sun); background: var(--paper); font-family: var(--pixel); font-size: 0.72rem; text-align: center; }
+    .lab-body { padding: clamp(0.7rem, 2vw, 1.25rem); }
+    .lab-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.7rem; margin-bottom: 0.8rem; }
+    .param-readout { color: var(--muted); font-family: var(--pixel); font-size: 0.72rem; letter-spacing: 0.04em; }
+    .param-readout strong { color: var(--sun); }
+    .track-tabs { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+    .track-tab { min-width: 3.3rem; min-height: 27px; padding: 0.16rem 0.38rem; border-color: var(--line); color: var(--muted); font-family: var(--pixel); font-size: 0.64rem; }
+    .track-tab.is-active { border-color: var(--aqua); color: var(--aqua); }
+    .sequencer-wrap { overflow-x: auto; padding-bottom: 0.35rem; }
+    .sequencer { display: grid; grid-template-columns: 4.9rem repeat(16, minmax(2.1rem, 1fr)); min-width: 690px; border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+    .step-number, .track-name, .step-cell { min-height: 2.7rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .step-number { display: flex; align-items: center; justify-content: center; color: var(--faint); font-family: var(--pixel); font-size: 0.63rem; }
+    .track-name { display: flex; align-items: center; padding: 0 0.48rem; color: var(--muted); font-family: var(--pixel); font-size: 0.63rem; letter-spacing: 0.05em; }
+    .track-name.is-selected { color: var(--aqua); background: color-mix(in srgb, var(--aqua) 8%, transparent); }
+    .step-cell { position: relative; min-width: 0; padding: 0; border-radius: 0; background: transparent; }
+    .step-cell::after { position: absolute; top: 50%; left: 50%; width: 8px; height: 8px; border: 1px solid var(--faint); border-radius: 1px; transform: translate(-50%, -50%); content: ""; }
+    .step-cell.is-active::after { border-color: var(--lime); background: var(--lime); box-shadow: 0 0 0.55rem color-mix(in srgb, var(--lime) 45%, transparent); }
+    .step-cell.is-trigless::after { border-color: var(--sun); background: repeating-linear-gradient(90deg, var(--sun) 0 2px, transparent 2px 4px); }
+    .step-cell.is-selected { outline: 2px solid var(--aqua); outline-offset: -2px; z-index: 1; }
+    .step-cell.is-playing { background: color-mix(in srgb, var(--coral) 18%, transparent); }
+    .step-cell:hover, .step-cell:focus-visible { border-color: var(--aqua); background: color-mix(in srgb, var(--aqua) 10%, transparent); outline: none; }
+    .lab-footer { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1rem; align-items: center; margin-top: 0.9rem; color: var(--muted); font-family: var(--pixel); font-size: 0.68rem; line-height: 1.55; }
+    .lab-footer strong { color: var(--lime); font-weight: 700; }
+    .lab-actions { display: flex; flex-wrap: wrap; justify-content: end; gap: 0.35rem; }
+    .lab-actions button { min-height: 28px; padding: 0.18rem 0.45rem; font-family: var(--pixel); font-size: 0.62rem; letter-spacing: 0.04em; }
+    .practice-console { position: relative; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--panel); box-shadow: 0 18px 40px var(--shadow); overflow: hidden; }
+    .practice-tabs { display: flex; flex-wrap: wrap; gap: 0.35rem; padding: 0.72rem 0.9rem; border-bottom: 1px solid var(--line); background: var(--paper-raised); }
+    .practice-tab { min-height: 29px; padding: 0.22rem 0.52rem; border-color: var(--line); color: var(--muted); font-family: var(--pixel); font-size: 0.64rem; letter-spacing: 0.05em; }
+    .practice-tab[aria-selected="true"] { border-color: var(--aqua); color: var(--aqua); background: color-mix(in srgb, var(--aqua) 10%, transparent); }
+    .practice-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(13.5rem, 0.32fr); min-height: 390px; }
+    .practice-stage { min-width: 0; padding: clamp(0.85rem, 2.3vw, 1.35rem); }
+    .practice-stage h3 { color: var(--aqua); }
+    .practice-stage > p { color: var(--muted); }
+    .practice-side { display: grid; align-content: start; gap: 0; border-left: 1px solid var(--line); background: color-mix(in srgb, var(--paper-raised) 72%, transparent); }
+    .practice-side section { padding: 0.9rem; border-bottom: 1px solid var(--line); }
+    .practice-side h3 { color: var(--muted); font-size: 0.72rem; letter-spacing: 0.07em; }
+    .practice-side p { margin: 0.45rem 0 0; color: var(--faint); font-size: 0.8rem; }
+    .practice-side button { width: 100%; min-height: 29px; margin-top: 0.45rem; padding: 0.2rem 0.42rem; font-family: var(--pixel); font-size: 0.63rem; letter-spacing: 0.04em; text-align: left; }
+    .practice-side button.is-armed { border-color: var(--coral); color: var(--coral); background: color-mix(in srgb, var(--coral) 9%, transparent); }
+    .practice-status { padding: 0.75rem 0.95rem; border-top: 1px solid var(--line); color: var(--muted); background: var(--paper-raised); font-family: var(--pixel); font-size: 0.67rem; line-height: 1.5; }
+    .practice-status strong { color: var(--lime); }
+    .practice-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2rem; }
+    .practice-block { padding-top: 0.7rem; border-top: 2px solid var(--line-strong); }
+    .practice-block:nth-child(3n + 1) { border-top-color: var(--aqua); }
+    .practice-block:nth-child(3n + 2) { border-top-color: var(--lime); }
+    .practice-block:nth-child(3n) { border-top-color: var(--sun); }
+    .practice-block h4 { margin: 0; color: var(--ink); font-family: var(--pixel); font-size: 0.74rem; letter-spacing: 0.05em; }
+    .practice-block p { margin: 0.45rem 0; color: var(--muted); font-size: 0.87rem; }
+    .choice-row, .operator-row, .stepper, .bank-row, .slot-grid, .scale-grid { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.65rem; }
+    .choice-row button, .operator-row button, .stepper button, .bank-row button, .slot-grid button, .scale-grid button { min-height: 29px; padding: 0.2rem 0.45rem; border-color: var(--line); color: var(--muted); font-family: var(--pixel); font-size: 0.62rem; }
+    .choice-row button.is-active, .operator-row button.is-active, .bank-row button.is-active, .scale-grid button.is-active { border-color: var(--aqua); color: var(--aqua); background: color-mix(in srgb, var(--aqua) 10%, transparent); }
+    .stepper { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 0.35rem; padding: 0.38rem 0; border-bottom: 1px solid var(--line); }
+    .stepper span:first-child { color: var(--muted); font-family: var(--pixel); font-size: 0.67rem; }
+    .stepper output { min-width: 3.4rem; color: var(--sun); font-family: var(--pixel); font-size: 0.72rem; text-align: right; }
+    .stepper button { min-width: 1.8rem; padding: 0.2rem; }
+    .range-control { display: grid; grid-template-columns: minmax(0, 1fr) 3.2rem; gap: 0.7rem; align-items: center; margin-top: 0.65rem; }
+    .range-control label { color: var(--muted); font-family: var(--pixel); font-size: 0.67rem; }
+    .range-control input { width: 100%; accent-color: var(--aqua); }
+    .range-control output { color: var(--sun); font-family: var(--pixel); font-size: 0.7rem; text-align: right; }
+    .transpose-grid { display: grid; grid-template-columns: repeat(8, minmax(2.8rem, 1fr)); gap: 0.35rem; margin-top: 0.7rem; }
+    .transpose-step { display: grid; gap: 0.2rem; padding: 0.35rem; border: 1px solid var(--line); background: var(--paper-raised); text-align: center; }
+    .transpose-step strong { color: var(--sun); font-family: var(--pixel); font-size: 0.78rem; }
+    .transpose-step span { color: var(--faint); font-family: var(--pixel); font-size: 0.58rem; }
+    .transpose-step button { min-height: 23px; padding: 0; border-color: var(--line); font-family: var(--pixel); font-size: 0.64rem; }
+    .slot-grid { display: grid; grid-template-columns: repeat(8, minmax(2rem, 1fr)); }
+    .slot-grid button { min-height: 34px; padding: 0; }
+    .slot-grid button.is-occupied { border-color: var(--lime); color: var(--lime); }
+    .slot-grid button.is-queued { border-color: var(--sun); color: var(--sun); background: color-mix(in srgb, var(--sun) 11%, transparent); }
+    .scale-grid { display: grid; grid-template-columns: repeat(6, minmax(2.8rem, 1fr)); }
+    .scale-grid button { min-height: 36px; padding: 0.18rem; }
+    .practice-palette { position: absolute; z-index: 2; inset: 3.6rem 0 0; display: grid; align-content: center; padding: 1.2rem; background: rgba(0, 0, 0, 0.76); }
+    .practice-palette[hidden] { display: none; }
+    .practice-palette-inner { max-width: 720px; width: 100%; margin: 0 auto; padding: 1rem; border: 1px solid var(--line-strong); border-top: 3px solid var(--lime); background: var(--panel); box-shadow: 0 18px 42px var(--shadow); }
+    .practice-palette-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .practice-palette-head h3 { margin: 0; color: var(--ink); font-size: 0.92rem; }
+    .practice-palette-head button { min-height: 28px; padding: 0.2rem 0.45rem; font-family: var(--pixel); font-size: 0.62rem; }
+    .palette-slots { display: grid; grid-template-columns: repeat(7, minmax(2.5rem, 1fr)); gap: 0.45rem; margin: 0.9rem 0; }
+    .palette-slots button { min-height: 50px; padding: 0.25rem; border-color: var(--line); color: var(--muted); font-family: var(--pixel); font-size: 0.68rem; }
+    .palette-slots button.is-occupied { border-color: var(--lime); color: var(--lime); }
+    .palette-slots button.is-active { border-color: var(--aqua); color: var(--aqua); background: color-mix(in srgb, var(--aqua) 11%, transparent); }
+    .palette-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .palette-actions button { min-height: 30px; padding: 0.22rem 0.48rem; font-family: var(--pixel); font-size: 0.62rem; }
+    .callout { margin: 2rem 0 0; padding: 0.85rem 1rem; border-left: 3px solid var(--sun); color: var(--muted); background: color-mix(in srgb, var(--sun) 6%, transparent); }
+    .callout strong { color: var(--ink); }
+    .two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(1.3rem, 4vw, 3.5rem); }
+    .three-col { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+    .detail { padding-top: 1rem; border-top: 2px solid var(--line-strong); }
+    .detail:nth-child(3n + 1) { border-top-color: var(--aqua); }
+    .detail:nth-child(3n + 2) { border-top-color: var(--lime); }
+    .detail:nth-child(3n) { border-top-color: var(--sun); }
+    .detail p { color: var(--muted); font-size: 0.94rem; }
+    .feature-list, .plain-list { margin: 0.7rem 0 0; padding: 0; list-style: none; }
+    .feature-list li, .plain-list li { position: relative; margin: 0.42rem 0; padding-left: 1rem; color: var(--muted); font-size: 0.94rem; }
+    .feature-list li::before { position: absolute; left: 0; color: var(--lime); content: "+"; font-family: var(--pixel); }
+    .plain-list li::before { position: absolute; left: 0; color: var(--aqua); content: ">"; font-family: var(--pixel); }
+    .workflow { counter-reset: workflow; display: grid; gap: 0; margin: 1.6rem 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+    .workflow li { display: grid; grid-template-columns: 3rem minmax(0, 1fr); gap: 0.8rem; padding: 0.8rem 0; border-bottom: 1px solid var(--line); color: var(--muted); }
+    .workflow li::before { counter-increment: workflow; color: var(--sun); content: "0" counter(workflow); font-family: var(--pixel); font-size: 0.73rem; font-weight: 700; }
+    .workflow strong { color: var(--ink); }
+    .parameter-map { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin-top: 1.3rem; border: 1px solid var(--line); background: var(--line); }
+    .parameter-map div { padding: 0.72rem 0.8rem; background: var(--panel); }
+    .parameter-map dt { color: var(--aqua); font-family: var(--pixel); font-size: 0.7rem; font-weight: 700; }
+    .parameter-map dd { margin: 0.22rem 0 0; color: var(--muted); font-size: 0.9rem; }
+    .view-map { display: grid; gap: 0; border-top: 1px solid var(--line); }
+    .view-row { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr) minmax(13rem, 0.74fr); gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--line); }
+    .view-key { color: var(--lime); font-family: var(--pixel); font-size: 0.8rem; font-weight: 700; letter-spacing: 0.08em; }
+    .view-row p { margin: 0; color: var(--muted); font-size: 0.94rem; }
+    .view-row strong { color: var(--ink); }
+    .shortcut-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.75rem; align-items: center; margin-bottom: 0.8rem; }
+    .shortcut-toolbar label { color: var(--muted); font-family: var(--pixel); font-size: 0.68rem; letter-spacing: 0.06em; }
+    .shortcut-toolbar input { width: 100%; margin-top: 0.35rem; padding: 0.52rem 0.62rem; border: 1px solid var(--line); border-radius: 4px; color: var(--ink); background: var(--panel); font-family: var(--pixel); font-size: 0.8rem; }
+    .shortcut-toolbar input:focus { border-color: var(--aqua); outline: none; }
+    .shortcut-count { color: var(--faint); font-family: var(--pixel); font-size: 0.66rem; white-space: nowrap; }
+    .shortcuts { border-top: 1px solid var(--line); }
+    .shortcut-row { display: grid; grid-template-columns: minmax(12rem, 0.55fr) minmax(0, 1fr) minmax(12rem, 0.86fr); gap: 1rem; align-items: center; padding: 0.67rem 0; border-bottom: 1px solid var(--line); }
+    .shortcut-row[hidden] { display: none; }
+    .shortcut-keys { display: flex; flex-wrap: wrap; gap: 0.2rem; }
+    .shortcut-name { color: var(--ink); font-family: var(--pixel); font-size: 0.75rem; }
+    .shortcut-note { color: var(--muted); font-size: 0.88rem; }
+    .footer { max-width: 1120px; margin: 0 auto; padding: 1.8rem 2rem 2.5rem; border-top: 1px solid var(--line); color: var(--muted); font-family: var(--pixel); font-size: 0.68rem; letter-spacing: 0.04em; }
+    .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    @media (max-width: 900px) {
+      .shell { display: block; }
+      .rail { position: sticky; z-index: 3; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.75rem; width: 100%; height: auto; padding: 0.65rem 0.85rem; border-right: 0; border-bottom: 1px solid var(--line); }
+      .brand { padding: 0; }
+      .brand img { width: 28px; height: 28px; }
+      .brand-subtitle { display: none; }
+      .rail nav { display: flex; gap: 0.08rem; overflow-x: auto; margin: 0; padding: 0; }
+      .rail nav a { flex: 0 0 auto; border-bottom: 2px solid transparent; border-left: 0; padding: 0.25rem 0.45rem; }
+      .rail nav a:hover, .rail nav a:focus-visible, .rail nav a[aria-current="true"] { border-bottom-color: var(--lime); border-left-color: transparent; }
+      .rail-tools { display: block; margin: 0; }
+      .rail-tools button { width: auto; padding: 0.32rem 0.5rem; }
+      .rail-tools button:last-child { display: none; }
+      .topline { padding: 0.8rem 1rem 0; }
+      .guide-section { padding: 3.6rem 1rem; }
+      .intro-grid { grid-template-columns: 1fr; }
+      .three-col { grid-template-columns: 1fr; gap: 1.4rem; }
+      .view-row { grid-template-columns: 6.2rem minmax(0, 1fr); }
+      .view-row p:last-child { grid-column: 2; }
+    }
+    @media (max-width: 620px) {
+      h1 { font-size: clamp(2.1rem, 12vw, 3.5rem); }
+      .topline span:last-child { display: none; }
+      .lab-header { align-items: flex-start; flex-direction: column; }
+      .lab-footer { grid-template-columns: 1fr; }
+      .lab-actions { justify-content: start; }
+      .practice-layout { grid-template-columns: 1fr; }
+      .practice-side { grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); border-left: 0; }
+      .practice-side section { border-bottom: 0; border-right: 1px solid var(--line); }
+      .two-col, .parameter-map { grid-template-columns: 1fr; }
+      .shortcut-toolbar { grid-template-columns: 1fr; }
+      .shortcut-row { grid-template-columns: 1fr; gap: 0.32rem; padding: 0.8rem 0; }
+      .shortcut-note { font-size: 0.84rem; }
+      .practice-columns { grid-template-columns: 1fr; }
+      .practice-side { grid-template-columns: 1fr; }
+      .practice-side section { border-right: 0; border-bottom: 1px solid var(--line); }
+      .transpose-grid { grid-template-columns: repeat(4, minmax(2.8rem, 1fr)); }
+      .slot-grid { grid-template-columns: repeat(4, minmax(2rem, 1fr)); }
+      .palette-slots { grid-template-columns: repeat(4, minmax(2.5rem, 1fr)); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#guide">Skip to the guide</a>
+  <div class="shell">
+    <aside class="rail" aria-label="Guide navigation">
+      <a class="brand" href="#top" aria-label="FMS Linux Field Guide home">
+        <img src="../packaging/io.fmslinux.FMS.svg" alt="FMS Linux icon">
+        <span><span class="brand-title">FMS LINUX</span><span class="brand-subtitle">FIELD GUIDE</span></span>
+      </a>
+      <nav aria-label="Chapters">
+        <a href="#top" aria-current="true">00 INTRO</a>
+        <a href="#start">01 START</a>
+        <a href="#grid">02 GRID</a>
+        <a href="#practice">03 PRACTICE</a>
+        <a href="#voices">04 VOICES</a>
+        <a href="#synthesis">05 SYNTHESIS</a>
+        <a href="#views">06 VIEWS</a>
+        <a href="#performance">07 PERFORMANCE</a>
+        <a href="#saving">08 SAVING</a>
+        <a href="#controls">09 CONTROLS</a>
+      </nav>
+      <div class="rail-tools">
+        <button type="button" id="theme-toggle" aria-pressed="false">THEME: DARK</button>
+        <button type="button" id="focus-lab">OPEN GRID LAB</button>
+      </div>
+    </aside>
+    <main class="main" id="guide">
+      <div class="topline"><span class="signal">NATIVE DESKTOP SEQUENCER</span><span>F1 FULL MAP / F6 CONTEXT HINTS</span></div>
+      <section class="guide-section" id="top">
+        <div class="intro-grid">
+          <div>
+            <p class="eyebrow">Five tracks. Per-step sound design.</p>
+            <h1>FMS Linux Field Guide</h1>
+            <p class="lede">A practical manual for turning the native Linux version of FMS into patterns, patches, variations, and live changes. The core idea is simple: every step owns its own sound.</p>
+            <div class="jump-row" aria-label="Popular destinations">
+              <a href="#grid">PROGRAM A GRID</a><a href="#practice">PRACTICE ALL VIEWS</a><a href="#voices">MAKE CHORDS</a><a href="#performance">PERFORM A PATTERN</a>
+            </div>
+          </div>
+          <dl class="stat-list">
+            <div><dt>05</dt><dd>tracks: four FM voices plus one LFSR noise voice</dd></div>
+            <div><dt>16</dt><dd>steps per track, each with independent timing and patch data</dd></div>
+            <div><dt>128</dt><dd>stored pattern slots for every track</dd></div>
+            <div><dt>02</dt><dd>FM paths: compact two-operator or advanced four-operator</dd></div>
+          </dl>
+        </div>
+        <figure class="product-shot">
+          <img src="fms-linux-ui.png" alt="FMS Linux Grid view showing four FM tracks, the Noise track, step data, and parameter controls">
+          <figcaption><strong>ACTUAL GRID VIEW</strong><span>THE APP IS A NATIVE SDL DESKTOP INTERFACE</span></figcaption>
+        </figure>
+      </section>
+      <section class="guide-section" id="start">
+        <div class="section-head">
+          <p class="eyebrow">01 / First signal</p>
+          <h2>Start with a working loop</h2>
+          <p>Build FMS Linux with SDL2, launch it, then press <kbd>Space</kbd>. The starter pattern is already voiced, so the shortest path to learning is to alter something that is playing.</p>
+        </div>
+        <div class="two-col">
+          <div>
+            <h3>Build and run</h3>
+            <pre><code>sudo apt install build-essential pkg-config libsdl2-dev
+make
+./fms-linux</code></pre>
+            <p>On Fedora, install <code>gcc-c++ make pkgconf-pkg-config SDL2-devel</code> instead. The program opens as a native SDL desktop application; it does not need a ROM or emulator.</p>
+          </div>
+          <div>
+            <h3>The first minute</h3>
+            <ol class="workflow">
+              <li><span><strong>Run transport.</strong> Press <kbd>Space</kbd> to hear the starter pattern.</span></li>
+              <li><span><strong>Pick a target.</strong> Use arrows, or press <kbd>1</kbd> through <kbd>5</kbd> to jump to a track.</span></li>
+              <li><span><strong>Edit one value.</strong> Choose a parameter with <kbd>[</kbd>/<kbd>]</kbd>, then use <kbd>-</kbd>/<kbd>=</kbd>.</span></li>
+              <li><span><strong>Save a useful moment.</strong> Press <kbd>Ctrl</kbd> + <kbd>S</kbd>; normal exit also saves state.</span></li>
+            </ol>
+          </div>
+        </div>
+        <aside class="callout"><strong>Think in events, not instruments.</strong> A trigger contains its note, level, pan, timing, and synth settings. Copying a good step is often faster than recreating a patch from zero.</aside>
+      </section>
+      <section class="guide-section" id="grid">
+        <div class="section-head">
+          <p class="eyebrow">02 / Grid view</p>
+          <h2>Program with the grid under your hands</h2>
+          <p>This miniature grid follows the same editing grammar as the app. Click a cell, or give the lab focus and use its listed keys. It is a documentation playground, not connected to a saved project.</p>
+        </div>
+        <div class="lab" id="grid-lab" tabindex="0" aria-label="Interactive five-track grid playground">
+          <div class="lab-header">
+            <span class="lab-title">GRID LAB // CLICK OR USE KEYBOARD</span>
+            <div class="transport">
+              <button type="button" id="lab-play" aria-pressed="false">PLAY</button>
+              <label for="lab-bpm" class="visually-hidden">Lab tempo in BPM</label>
+              <input id="lab-bpm" type="number" min="30" max="300" value="120" aria-label="Lab tempo in BPM">
+              <button type="button" id="lab-clear">CLEAR</button>
+            </div>
+          </div>
+          <div class="lab-body">
+            <div class="lab-meta">
+              <div class="track-tabs" id="track-tabs" aria-label="Select a track"></div>
+              <div class="param-readout">TARGET <strong id="lab-target">FM 1 / STEP 01</strong> &nbsp; PARAM <strong id="lab-param">NOTE</strong> &nbsp; VALUE <strong id="lab-value">C3</strong></div>
+            </div>
+            <div class="sequencer-wrap"><div class="sequencer" id="sequencer" role="grid" aria-label="Five tracks by sixteen steps"></div></div>
+            <div class="lab-footer" aria-live="polite">
+              <div id="lab-status"><strong>READY.</strong> Arrows move. <kbd>Enter</kbd> toggles. <kbd>T</kbd> makes a trigless event. <kbd>[</kbd>/<kbd>]</kbd> changes parameter.</div>
+              <div class="lab-actions" aria-label="Grid lab actions">
+                <button type="button" data-lab-action="preset">STARTER LOOP</button><button type="button" data-lab-action="random">RANDOMIZE</button><button type="button" data-lab-action="copy">COPY</button><button type="button" data-lab-action="paste">PASTE</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="two-col" style="margin-top: 2.4rem;">
+          <div>
+            <h3>Everyday editing</h3>
+            <ul class="feature-list">
+              <li><kbd>Enter</kbd> places or removes a trigger. <kbd>Delete</kbd> and <kbd>Backspace</kbd> clear it.</li>
+              <li><kbd>[</kbd> and <kbd>]</kbd> move through step and synth parameters; <kbd>Shift</kbd> + <kbd>-</kbd>/<kbd>=</kbd> changes values coarsely.</li>
+              <li><kbd>Shift</kbd> + arrows makes a rectangular selection. Press <kbd>F5</kbd> to switch scope between selection, track, and all tracks.</li>
+              <li><kbd>C</kbd>, <kbd>X</kbd>, and <kbd>V</kbd> copy, cut, and paste a step or a selected rectangle.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Time is a parameter</h3>
+            <ul class="feature-list">
+              <li><kbd>L</kbd> changes the active track length. Each track can loop independently.</li>
+              <li><kbd>Alt</kbd> + left/right changes track rate. <kbd>Alt</kbd> + up/down changes shuffle; add <kbd>Ctrl</kbd> to affect every track.</li>
+              <li><kbd>D</kbd> cycles forward, ping-pong, reverse, and random direction. <kbd>O</kbd> rotates a track or range.</li>
+              <li>The <code>WAIT</code> field shifts a trigger by microticks. Negative offsets are constrained at queued pattern boundaries so a fresh pattern does not arrive early.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+      <section class="guide-section" id="practice">
+        <div class="section-head">
+          <p class="eyebrow">03 / Practice console</p>
+          <h2>Touch every working surface</h2>
+          <p>The Grid Lab above is the fast editing surface. This console covers the rest of the instrument: advanced FM, Echo, Transpose, Mod, Scale, Data, Palette, Snapshot, and the project actions. Its state is local to this page, so it is safe to experiment freely.</p>
+        </div>
+        <div class="practice-console" id="practice-console" aria-label="Interactive FMS Linux practice console">
+          <div class="lab-header"><span class="lab-title">PRACTICE CONSOLE // LOCAL GUIDE STATE</span><div class="transport"><button type="button" data-practice-action="snapshot">SNAPSHOT</button><button type="button" data-practice-action="palette">PALETTE</button></div></div>
+          <div class="practice-tabs" id="practice-tabs" role="tablist" aria-label="Practice view">
+            <button type="button" class="practice-tab" role="tab" data-practice-view="GRID" aria-selected="false">GRID</button>
+            <button type="button" class="practice-tab" role="tab" data-practice-view="SYNTH" aria-selected="true">SYNTH</button>
+            <button type="button" class="practice-tab" role="tab" data-practice-view="ECHO" aria-selected="false">ECHO</button>
+            <button type="button" class="practice-tab" role="tab" data-practice-view="TRANSPOSE" aria-selected="false">TRANSPOSE</button>
+            <button type="button" class="practice-tab" role="tab" data-practice-view="MOD" aria-selected="false">MOD</button>
+            <button type="button" class="practice-tab" role="tab" data-practice-view="SCALE" aria-selected="false">SCALE</button>
+            <button type="button" class="practice-tab" role="tab" data-practice-view="DATA" aria-selected="false">DATA</button>
+          </div>
+          <div class="practice-layout">
+            <div class="practice-stage" id="practice-stage" role="tabpanel" aria-live="polite"><p>Preparing the selected view.</p></div>
+            <aside class="practice-side" aria-label="Practice session actions">
+              <section><h3>PROJECT</h3><button type="button" data-practice-action="project-new">START NEW</button><button type="button" data-practice-action="project-clear">CLEAR LIVE TRACKS</button><button type="button" data-practice-action="project-save">SAVE SESSION</button></section>
+              <section><h3>SESSION</h3><button type="button" data-practice-action="snapshot">CAPTURE / RECALL SNAPSHOT</button><button type="button" data-practice-action="palette">OPEN SOUND PALETTE</button><p>These model the app workflow without writing its save file.</p></section>
+              <section><h3>HANDOFF</h3><p>In FMS Linux, <kbd>Ctrl</kbd> + <kbd>N</kbd> opens Project actions, <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Backspace</kbd> targets Clear, and <kbd>Ctrl</kbd> + <kbd>S</kbd> saves now.</p></section>
+            </aside>
+          </div>
+          <div class="practice-status" id="practice-status"><strong>SYNTH READY.</strong> Select a view and change a value to see the workflow in context.</div>
+          <div class="practice-palette" id="practice-palette" hidden>
+            <div class="practice-palette-inner"><div class="practice-palette-head"><h3>SOUND PALETTE</h3><button type="button" data-practice-action="palette-close">CLOSE</button></div><p>Slots copy sound design only; the grid event keeps its note, trigger, level, pan, and timing.</p><div class="palette-slots" id="palette-slots"></div><div class="palette-actions"><button type="button" data-practice-action="palette-load">RECALL TO STEP</button><button type="button" data-practice-action="palette-store">STORE STEP SOUND</button><button type="button" data-practice-action="palette-track">APPLY TO TRACK</button><button type="button" data-practice-action="palette-random">RANDOM SOUND</button><button type="button" data-practice-action="palette-clear">CLEAR SLOT</button></div></div>
+          </div>
+        </div>
+      </section>
+      <section class="guide-section" id="voices">
+        <div class="section-head">
+          <p class="eyebrow">04 / Voice behavior</p>
+          <h2>Chord, slide, and interrupt with intent</h2>
+          <p>The four FM tracks share a finite FM voice pool. A step can ask for up to three chord offsets in addition to its root; a tonal arrangement stays clear when you decide which tracks deserve the available voices.</p>
+        </div>
+        <div class="three-col">
+          <article class="detail"><h3>Chord fields</h3><p>Choose <code>CHD1</code>, <code>CHD2</code>, or <code>CHD3</code> on an FM step and enter semitone offsets relative to <code>NOTE</code>. A value of <code>+7</code> adds a fifth; zero leaves that chord slot unused.</p></article>
+          <article class="detail"><h3>Trigless motion</h3><p>Use <kbd>T</kbd> to toggle a trigless step. It updates target values without restarting oscillator phase or envelopes, which makes it useful for stepped pitch bends, level movement, and evolving modulation.</p></article>
+          <article class="detail"><h3>Conditional events</h3><p><code>COND</code> determines whether an event fires every nth count. Combine condition, microtime, and independent track length to make movement that does not reset with the main loop.</p></article>
+        </div>
+        <div class="callout"><strong>Practical chord recipe:</strong> Put a stable bass or lead on a separate FM track, then use one of the remaining tracks for chord roots and its three chord offsets. When the pool is busy, simplify the chord or leave headroom in the arrangement.</div>
+      </section>
+      <section class="guide-section" id="synthesis">
+        <div class="section-head">
+          <p class="eyebrow">05 / Synthesis</p>
+          <h2>Choose a compact voice or go deeper</h2>
+          <p>FM steps begin with the original compact two-operator engine. Advanced FM is an opt-in, per-step engine, so it expands sound design without changing the rendering path of legacy sounds.</p>
+        </div>
+        <div class="two-col">
+          <div>
+            <h3>Legacy FM and noise</h3>
+            <dl class="parameter-map">
+              <div><dt>A.ATK / A.HLD / A.REL</dt><dd>Amplitude attack, hold, and release.</dd></div>
+              <div><dt>RATIO / M.DEP / M.FBK</dt><dd>Modulator ratio, depth, and feedback.</dd></div>
+              <div><dt>M.ATK / M.REL / M.END</dt><dd>Modulation envelope shape and sustain.</dd></div>
+              <div><dt>S.DEP / S.REL</dt><dd>Pitch sweep amount and fade-out.</dd></div>
+              <div><dt>MODE</dt><dd>Two-operator FM or parallel routing.</dd></div>
+              <div><dt>RATE / WIDTH</dt><dd>Noise speed and wide/narrow LFSR mode.</dd></div>
+            </dl>
+            <p>Parallel mode mixes the two FM operators instead of phase-modulating one with the other. Use it for detuned pairs, two-note intervals, and direct additive colors.</p>
+          </div>
+          <div>
+            <h3>Advanced FM</h3>
+            <ul class="feature-list">
+              <li>Four operators with selectable sine, triangle, saw, square, pulse, or noise shapes.</li>
+              <li>Twelve routing algorithms, individual ratio, level, feedback, and fine detune.</li>
+              <li>Amp ADSR, four routed modulation slots, multimode filter, resonance, and drive.</li>
+              <li>One to four stereo unison voices with detune and width controls.</li>
+            </ul>
+            <p>Open <strong>SYNTH</strong> with <kbd>Tab</kbd> and use <kbd>Page Up</kbd>/<kbd>Page Down</kbd> to audition neighboring steps without losing the focused field. Advanced fields work with range, track, all-track, palette, pattern, snapshot, and preview workflows.</p>
+          </div>
+        </div>
+      </section>
+      <section class="guide-section" id="views">
+        <div class="section-head">
+          <p class="eyebrow">06 / Seven places to work</p>
+          <h2>Change view, keep context</h2>
+          <p><kbd>Tab</kbd> and <kbd>Shift</kbd> + <kbd>Tab</kbd> cycle Grid, Synth, Echo, Transpose, Mod, Scale, and Data. Each view stays tied to the active track and selected step, so sound design and sequencing remain close together.</p>
+        </div>
+        <div class="view-map">
+          <article class="view-row"><div class="view-key">GRID</div><p><strong>The main pattern surface.</strong> Place triggers and edit step values, legacy patch values, track length, rate, shuffle, direction, mute, solo, and scope.</p><p>Use this for programming and fast changes while transport runs.</p></article>
+          <article class="view-row"><div class="view-key">SYNTH</div><p><strong>The detailed advanced FM editor.</strong> Navigate the complete field list for the selected FM step, including operators, routing, envelopes, filter, drive, unison, and modulation slots.</p><p>Use this when a step needs a deliberately designed timbre rather than a quick legacy adjustment.</p></article>
+          <article class="view-row"><div class="view-key">ECHO</div><p><strong>Algorithmic repeats per track.</strong> Set repeat count, spacing, transpose, volume/modulation/feedback attenuation, and echo pan behavior.</p><p>The <code>ECHO</code> step parameter decides whether an event sends into this track effect.</p></article>
+          <article class="view-row"><div class="view-key">TRANSPOSE</div><p><strong>An eight-step pitch lane.</strong> Adjust transposition values, lane length, rate, and whether it advances by pattern, step, or trigger.</p><p>The <code>TSP</code> step parameter controls whether a particular event receives the lane.</p></article>
+          <article class="view-row"><div class="view-key">MOD</div><p><strong>A step-sampled modulator.</strong> Route each track's modulation source to a target track and destination, then choose speed, shape, depth, and start offset.</p><p>It behaves like an LFO sampled at events, so polymetric clocks can create useful phase drift.</p></article>
+          <article class="view-row"><div class="view-key">SCALE</div><p><strong>Pitch entry and playback quantization.</strong> Choose a root and a twelve-note mask. Entered and played notes follow the current scale.</p><p>Store a scale in a bank when a recall needs to change musical context with a pattern.</p></article>
+          <article class="view-row"><div class="view-key">DATA</div><p><strong>Patterns, banks, and live loading.</strong> Select a slot or whole column, save, load in place, load and reset, cue, clear, randomize, rename, lock, and manage stored BPM/scale.</p><p>Use this as the performance memory and safety surface.</p></article>
+        </div>
+      </section>
+      <section class="guide-section" id="performance">
+        <div class="section-head">
+          <p class="eyebrow">07 / Performance</p>
+          <h2>Prepare changes before you need them</h2>
+          <p>The strongest live workflow is not frantic editing. It is a small collection of variations, a snapshot for safe experiments, and queued patterns that land on a musical boundary.</p>
+        </div>
+        <div class="three-col">
+          <article class="detail"><h3>Palette</h3><p>Press <kbd>P</kbd> to open the appropriate FM or noise palette. <kbd>Enter</kbd> recalls a sound, <kbd>Shift</kbd> + <kbd>Enter</kbd> stores it, and <kbd>Ctrl</kbd> + <kbd>Enter</kbd> applies it across the track. Slots <code>0</code> through <code>D</code> persist per engine.</p></article>
+          <article class="detail"><h3>Snapshot</h3><p>Press <kbd>S</kbd> to capture or recall a performance snapshot. Take one before an energetic edit, then flip between the stored state and the live state without loading a new pattern.</p></article>
+          <article class="detail"><h3>Pattern cue</h3><p>In Data, <kbd>Q</kbd> queues the selected slot or column. Single-track cues land at that track's next nominal loop boundary; whole columns land atomically at the next global 16-step boundary.</p></article>
+        </div>
+        <div class="two-col" style="margin-top: 2.5rem;">
+          <div>
+            <h3>A reliable variation loop</h3>
+            <ol class="workflow">
+              <li><span><strong>Copy the current material.</strong> In Data, save a slot or a whole five-track column with <kbd>Shift</kbd> + <kbd>Enter</kbd>.</span></li>
+              <li><span><strong>Make a controlled difference.</strong> Rotate, change one parameter across a range, or use incremental <kbd>R</kbd> randomization.</span></li>
+              <li><span><strong>Protect the original.</strong> Capture a snapshot with <kbd>S</kbd> before trying aggressive sound edits.</span></li>
+              <li><span><strong>Queue the return.</strong> Select the prepared slot or column and press <kbd>Q</kbd>.</span></li>
+            </ol>
+          </div>
+          <div>
+            <h3>Mute and movement</h3>
+            <ul class="feature-list">
+              <li><kbd>M</kbd> mutes the selected track; <kbd>Shift</kbd> + <kbd>M</kbd> solos it. <kbd>U</kbd> clears both states everywhere.</li>
+              <li><kbd>R</kbd> nudges the selected parameter toward increasingly random values in the active scope. <kbd>Shift</kbd> + <kbd>R</kbd> makes a full random pattern for the track.</li>
+              <li><kbd>O</kbd> rotates the active track or range. Add <kbd>Ctrl</kbd> to rotate every track together.</li>
+              <li>Use in-place loads for phase-continuous changes. Use reset loads when different lengths and rates need a clean new downbeat.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+      <section class="guide-section" id="saving">
+        <div class="section-head">
+          <p class="eyebrow">08 / State and files</p>
+          <h2>Save one state well</h2>
+          <p>FMS Linux keeps project state in a versioned, checksummed, atomically replaced file. A partial write cannot overwrite the last good session.</p>
+        </div>
+        <div class="two-col">
+          <div>
+            <h3>Default save location</h3>
+            <pre><code>$XDG_DATA_HOME/fms-linux/state.bin
+~/.local/share/fms-linux/state.bin when XDG_DATA_HOME is unset</code></pre>
+            <p>Use <code>--save-path FILE</code> to open a separate working state. This is useful for a set, an experiment, or a clean tutorial session. The header <strong>PROJECT</strong> menu exposes Start New, Clear Working Tracks, and Save Now; New and Clear require a confirmation step.</p>
+          </div>
+          <div>
+            <h3>Useful command-line checks</h3>
+            <pre><code>make test
+make screenshot
+make audio-smoke
+./fms-linux --help</code></pre>
+            <p><code>make screenshot</code> verifies the UI through SDL's dummy driver. <code>make audio-smoke</code> exercises the real-time engine with SDL's dummy audio driver.</p>
+          </div>
+        </div>
+      </section>
+      <section class="guide-section" id="controls">
+        <div class="section-head">
+          <p class="eyebrow">09 / Control reference</p>
+          <h2>Find the move, then make it muscle memory</h2>
+          <p>Filter by the action you want. <kbd>F6</kbd> opens a non-modal side panel that changes its hints for the active view or overlay; <kbd>F1</kbd> or <kbd>?</kbd> opens the full control reference without leaving FMS Linux.</p>
+        </div>
+        <div class="shortcut-toolbar">
+          <label for="shortcut-filter">FILTER CONTROLS<input id="shortcut-filter" type="search" placeholder="Try: pattern, range, tempo, palette" autocomplete="off"></label>
+          <output class="shortcut-count" id="shortcut-count" for="shortcut-filter">0 CONTROLS</output>
+        </div>
+        <div class="shortcuts" id="shortcuts">
+          <div class="shortcut-row" data-search="transport play stop sequencer"><div class="shortcut-keys"><kbd>Space</kbd></div><div class="shortcut-name">TRANSPORT</div><div class="shortcut-note">Start or stop the sequencer.</div></div>
+          <div class="shortcut-row" data-search="navigate cursor track step arrows"><div class="shortcut-keys"><kbd>Arrows</kbd></div><div class="shortcut-name">MOVE CURSOR</div><div class="shortcut-note">Move between tracks and steps.</div></div>
+          <div class="shortcut-row" data-search="range selection multi step rectangle"><div class="shortcut-keys"><kbd>Shift</kbd><kbd>Arrows</kbd></div><div class="shortcut-name">RANGE SELECT</div><div class="shortcut-note">Create or extend a rectangular edit range.</div></div>
+          <div class="shortcut-row" data-search="scope selection track all"><div class="shortcut-keys"><kbd>F5</kbd></div><div class="shortcut-name">EDIT SCOPE</div><div class="shortcut-note">Cycle selection/range, selected track, and all tracks.</div></div>
+          <div class="shortcut-row" data-search="context hint hints side panel key help"><div class="shortcut-keys"><kbd>F6</kbd></div><div class="shortcut-name">CONTEXT HINTS</div><div class="shortcut-note">Toggle the non-modal side panel with the shortcuts for the active view or overlay.</div></div>
+          <div class="shortcut-row" data-search="trigger place remove toggle step"><div class="shortcut-keys"><kbd>Enter</kbd></div><div class="shortcut-name">TOGGLE TRIGGER</div><div class="shortcut-note">Place or remove a trigger on the selected step.</div></div>
+          <div class="shortcut-row" data-search="clear delete backspace step"><div class="shortcut-keys"><kbd>Delete</kbd><kbd>Backspace</kbd></div><div class="shortcut-name">CLEAR STEP</div><div class="shortcut-note">Clear the selected event.</div></div>
+          <div class="shortcut-row" data-search="parameter previous next synth step"><div class="shortcut-keys"><kbd>[</kbd><kbd>]</kbd></div><div class="shortcut-name">SELECT PARAMETER</div><div class="shortcut-note">Move through the parameters available to the selected track.</div></div>
+          <div class="shortcut-row" data-search="value fine coarse adjust"><div class="shortcut-keys"><kbd>-</kbd><kbd>=</kbd><kbd>Shift</kbd></div><div class="shortcut-name">CHANGE VALUE</div><div class="shortcut-note">Adjust the active value; hold Shift for a coarse change.</div></div>
+          <div class="shortcut-row" data-search="track jump fm noise"><div class="shortcut-keys"><kbd>1</kbd>-<kbd>5</kbd></div><div class="shortcut-name">JUMP TRACK</div><div class="shortcut-note">Select FM 1-4 or the Noise track.</div></div>
+          <div class="shortcut-row" data-search="tempo bpm"><div class="shortcut-keys"><kbd>,</kbd><kbd>.</kbd><kbd>Shift</kbd></div><div class="shortcut-name">TEMPO</div><div class="shortcut-note">Lower or raise BPM; Shift changes by 10 BPM.</div></div>
+          <div class="shortcut-row" data-search="rate track clock alt"><div class="shortcut-keys"><kbd>Alt</kbd><kbd>Left/Right</kbd></div><div class="shortcut-name">TRACK RATE</div><div class="shortcut-note">Change the selected track's rate multiplier.</div></div>
+          <div class="shortcut-row" data-search="shuffle swing alt all"><div class="shortcut-keys"><kbd>Alt</kbd><kbd>Up/Down</kbd></div><div class="shortcut-name">SHUFFLE</div><div class="shortcut-note">Change shuffle; add Ctrl to target all tracks.</div></div>
+          <div class="shortcut-row" data-search="length track loop"><div class="shortcut-keys"><kbd>L</kbd><kbd>Shift</kbd><kbd>L</kbd></div><div class="shortcut-name">TRACK LENGTH</div><div class="shortcut-note">Increase or decrease the selected track length.</div></div>
+          <div class="shortcut-row" data-search="direction forward ping pong reverse random"><div class="shortcut-keys"><kbd>D</kbd><kbd>Shift</kbd><kbd>D</kbd></div><div class="shortcut-name">TRACK DIRECTION</div><div class="shortcut-note">Cycle direction for the selected track or every track.</div></div>
+          <div class="shortcut-row" data-search="rotate shift steps range"><div class="shortcut-keys"><kbd>O</kbd><kbd>Shift</kbd><kbd>O</kbd></div><div class="shortcut-name">ROTATE</div><div class="shortcut-note">Rotate a selected track/range forward or backward; Ctrl targets all tracks.</div></div>
+          <div class="shortcut-row" data-search="view grid synth echo transpose mod scale data tab"><div class="shortcut-keys"><kbd>Tab</kbd><kbd>Shift</kbd><kbd>Tab</kbd></div><div class="shortcut-name">CHANGE VIEW</div><div class="shortcut-note">Cycle among all seven work views.</div></div>
+          <div class="shortcut-row" data-search="copy cut paste range clipboard"><div class="shortcut-keys"><kbd>C</kbd><kbd>X</kbd><kbd>V</kbd></div><div class="shortcut-name">CLIPBOARD</div><div class="shortcut-note">Copy, cut, or paste the selected step or rectangle.</div></div>
+          <div class="shortcut-row" data-search="trigless automation slide"><div class="shortcut-keys"><kbd>T</kbd></div><div class="shortcut-name">TRIGLESS</div><div class="shortcut-note">Toggle a value-changing event that does not retrigger the voice.</div></div>
+          <div class="shortcut-row" data-search="random parameter pattern"><div class="shortcut-keys"><kbd>R</kbd><kbd>Shift</kbd><kbd>R</kbd></div><div class="shortcut-name">RANDOMIZE</div><div class="shortcut-note">Nudge a parameter in scope, or generate a new pattern for the track.</div></div>
+          <div class="shortcut-row" data-search="mute solo unmute"><div class="shortcut-keys"><kbd>M</kbd><kbd>Shift</kbd><kbd>M</kbd><kbd>U</kbd></div><div class="shortcut-name">MUTE / SOLO</div><div class="shortcut-note">Mute, solo, or clear mute and solo from all tracks.</div></div>
+          <div class="shortcut-row" data-search="palette sound store recall"><div class="shortcut-keys"><kbd>P</kbd></div><div class="shortcut-name">PALETTE</div><div class="shortcut-note">Open the FM or noise sound palette.</div></div>
+          <div class="shortcut-row" data-search="snapshot performance recall"><div class="shortcut-keys"><kbd>S</kbd></div><div class="shortcut-name">SNAPSHOT</div><div class="shortcut-note">Capture or recall the live performance state.</div></div>
+          <div class="shortcut-row" data-search="project new start clear save session"><div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>N</kbd></div><div class="shortcut-name">PROJECT MENU</div><div class="shortcut-note">Open Start New, Clear Working Tracks, and Save Now. New is confirmation guarded.</div></div>
+          <div class="shortcut-row" data-search="project clear live tracks working"><div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>Backspace</kbd></div><div class="shortcut-name">PROJECT CLEAR</div><div class="shortcut-note">Open Project actions with Clear Working Tracks selected; confirm before changing the live tracks.</div></div>
+          <div class="shortcut-row" data-search="save state file"><div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>S</kbd></div><div class="shortcut-name">SAVE NOW</div><div class="shortcut-note">Write the current state immediately.</div></div>
+          <div class="shortcut-row" data-search="help control reference"><div class="shortcut-keys"><kbd>F1</kbd><kbd>?</kbd></div><div class="shortcut-name">HELP</div><div class="shortcut-note">Open the in-app control reference.</div></div>
+          <div class="shortcut-row" data-search="theme accent appearance"><div class="shortcut-keys"><kbd>F2</kbd><kbd>F3</kbd></div><div class="shortcut-name">THEME / ACCENT</div><div class="shortcut-note">Change the application theme or accent color.</div></div>
+          <div class="shortcut-row" data-search="controller mapping gamepad"><div class="shortcut-keys"><kbd>F4</kbd></div><div class="shortcut-name">CONTROLLER MAP</div><div class="shortcut-note">Open persistent SDL game-controller mappings.</div></div>
+          <div class="shortcut-row" data-search="data pattern save load cue column"><div class="shortcut-keys"><kbd>Enter</kbd><kbd>Shift</kbd><kbd>Enter</kbd><kbd>Q</kbd></div><div class="shortcut-name">DATA SLOT</div><div class="shortcut-note">Load, save, or cue the selected pattern slot or column in Data view.</div></div>
+        </div>
+      </section>
+      <footer class="footer">FMS LINUX / NATIVE FM STEP SEQUENCER / GUIDE MATCHES THE CURRENT DESKTOP WORKFLOW</footer>
+    </main>
+  </div>
+  <script>
+    (() => {
+      const tracks = ["FM 1", "FM 2", "FM 3", "FM 4", "NOISE"];
+      const params = ["NOTE", "LEVEL", "PAN", "PORT", "COND", "WAIT", "CHD1", "ECHO", "TRIG"];
+      const noteNames = ["C3", "D3", "E3", "F3", "G3", "A3", "B3", "C4", "D4", "E4", "F4", "G4"];
+      const grid = Array.from({ length: tracks.length }, () => Array.from({ length: 16 }, () => ({ active: false, trigless: false })));
+      const starter = [[0, 4, 8, 12], [2, 6, 10, 14], [0, 8], [4, 12], [0, 4, 8, 12]];
+      let selectedTrack = 0;
+      let selectedStep = 0;
+      let playhead = 0;
+      let playing = false;
+      let paramIndex = 0;
+      let clipboard = null;
+      let transportTimer = null;
+      const lab = document.querySelector("#grid-lab");
+      const sequencer = document.querySelector("#sequencer");
+      const tabs = document.querySelector("#track-tabs");
+      const target = document.querySelector("#lab-target");
+      const param = document.querySelector("#lab-param");
+      const value = document.querySelector("#lab-value");
+      const status = document.querySelector("#lab-status");
+      const playButton = document.querySelector("#lab-play");
+      const bpmInput = document.querySelector("#lab-bpm");
+      function seedStarter() {
+        grid.forEach((track, trackIndex) => track.forEach((step, stepIndex) => {
+          step.active = starter[trackIndex].includes(stepIndex);
+          step.trigless = false;
+        }));
+      }
+      function valueForSelection() {
+        const selected = grid[selectedTrack][selectedStep];
+        if (params[paramIndex] === "NOTE") return noteNames[(selectedStep + selectedTrack * 3) % noteNames.length];
+        if (params[paramIndex] === "LEVEL") return selected.active ? "64" : "00";
+        if (params[paramIndex] === "PAN") return ["L", "C", "R"][selectedTrack % 3];
+        if (params[paramIndex] === "PORT") return selected.trigless ? "18" : "00";
+        if (params[paramIndex] === "COND") return "1:1";
+        if (params[paramIndex] === "WAIT") return selected.trigless ? "+2" : "0";
+        if (params[paramIndex] === "CHD1") return selectedTrack === 2 ? "+7" : "0";
+        if (params[paramIndex] === "ECHO") return selectedTrack === 3 ? "ON" : "OFF";
+        return selected.trigless ? "YES" : "NO";
+      }
+      function describe(action) { status.innerHTML = `<strong>${action}</strong> FM 1-4 share the FM voice pool; NOISE is its own LFSR voice.`; }
+      function renderTabs() {
+        tabs.replaceChildren(...tracks.map((name, index) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "track-tab" + (index === selectedTrack ? " is-active" : "");
+          button.textContent = name;
+          button.setAttribute("aria-pressed", String(index === selectedTrack));
+          button.addEventListener("click", () => { selectedTrack = index; render(); lab.focus(); });
+          return button;
+        }));
+      }
+      function renderGrid() {
+        const children = [];
+        const blank = document.createElement("div");
+        blank.className = "step-number";
+        blank.textContent = "TRACK";
+        children.push(blank);
+        for (let index = 0; index < 16; index += 1) {
+          const number = document.createElement("div");
+          number.className = "step-number";
+          number.textContent = String(index + 1).padStart(2, "0");
+          children.push(number);
+        }
+        grid.forEach((track, trackIndex) => {
+          const name = document.createElement("div");
+          name.className = "track-name" + (trackIndex === selectedTrack ? " is-selected" : "");
+          name.textContent = tracks[trackIndex];
+          children.push(name);
+          track.forEach((step, stepIndex) => {
+            const cell = document.createElement("button");
+            cell.type = "button";
+            cell.className = "step-cell";
+            if (step.active) cell.classList.add("is-active");
+            if (step.trigless) cell.classList.add("is-trigless");
+            if (trackIndex === selectedTrack && stepIndex === selectedStep) cell.classList.add("is-selected");
+            if (playing && stepIndex === playhead) cell.classList.add("is-playing");
+            cell.setAttribute("aria-label", `${tracks[trackIndex]} step ${stepIndex + 1}${step.active ? ", active" : ", empty"}${step.trigless ? ", trigless" : ""}`);
+            cell.addEventListener("click", () => { selectedTrack = trackIndex; selectedStep = stepIndex; render(); lab.focus(); });
+            children.push(cell);
+          });
+        });
+        sequencer.replaceChildren(...children);
+      }
+      function renderReadout() {
+        target.textContent = `${tracks[selectedTrack]} / STEP ${String(selectedStep + 1).padStart(2, "0")}`;
+        param.textContent = params[paramIndex];
+        value.textContent = valueForSelection();
+        playButton.textContent = playing ? "STOP" : "PLAY";
+        playButton.setAttribute("aria-pressed", String(playing));
+      }
+      function render() { renderTabs(); renderGrid(); renderReadout(); }
+      function bpm() {
+        const parsed = Number(bpmInput.value);
+        return Number.isFinite(parsed) ? Math.min(300, Math.max(30, parsed)) : 120;
+      }
+      function updateTimer() {
+        window.clearInterval(transportTimer);
+        transportTimer = null;
+        if (!playing) return;
+        transportTimer = window.setInterval(() => { playhead = (playhead + 1) % 16; renderGrid(); }, 60000 / bpm() / 4);
+      }
+      function togglePlay() { playing = !playing; updateTimer(); describe(playing ? "PLAYING." : "STOPPED."); render(); }
+      function clearGrid() {
+        grid.forEach((track) => track.forEach((step) => { step.active = false; step.trigless = false; }));
+        describe("GRID CLEARED.");
+        render();
+      }
+      function randomizeGrid() {
+        grid.forEach((track, trackIndex) => track.forEach((step, stepIndex) => {
+          step.active = Math.random() > (trackIndex === 4 ? 0.63 : 0.74);
+          step.trigless = step.active && stepIndex % 5 === 0 && Math.random() > 0.55;
+        }));
+        describe("RANDOMIZED. PRESS R AGAIN IN THE APP FOR A SMALLER NUDGE.");
+        render();
+      }
+      function select(deltaTrack, deltaStep) {
+        selectedTrack = (selectedTrack + deltaTrack + tracks.length) % tracks.length;
+        selectedStep = (selectedStep + deltaStep + 16) % 16;
+        render();
+      }
+      function toggleStep() {
+        const step = grid[selectedTrack][selectedStep];
+        step.active = !step.active;
+        if (!step.active) step.trigless = false;
+        describe(step.active ? "TRIGGER PLACED." : "TRIGGER REMOVED.");
+        render();
+      }
+      function toggleTrigless() {
+        const step = grid[selectedTrack][selectedStep];
+        step.active = true;
+        step.trigless = !step.trigless;
+        describe(step.trigless ? "TRIGLESS EVENT PLACED." : "NORMAL TRIGGER RESTORED.");
+        render();
+      }
+      function copyStep() { clipboard = { ...grid[selectedTrack][selectedStep] }; describe("STEP COPIED."); }
+      function pasteStep() {
+        if (!clipboard) { describe("NOTHING COPIED YET."); return; }
+        grid[selectedTrack][selectedStep] = { ...clipboard };
+        describe("STEP PASTED.");
+        render();
+      }
+      function handleLabKey(event) {
+        const targetElement = event.target;
+        if (targetElement instanceof HTMLInputElement || targetElement instanceof HTMLTextAreaElement) return;
+        const key = event.key.toLowerCase();
+        const handled = new Set(["arrowup", "arrowdown", "arrowleft", "arrowright", "enter", " ", "t", "r", "c", "v", "[", "]", "-", "="]);
+        if (!handled.has(key)) return;
+        event.preventDefault();
+        if (key === "arrowup") select(-1, 0);
+        else if (key === "arrowdown") select(1, 0);
+        else if (key === "arrowleft") select(0, -1);
+        else if (key === "arrowright") select(0, 1);
+        else if (key === "enter") toggleStep();
+        else if (key === " ") togglePlay();
+        else if (key === "t") toggleTrigless();
+        else if (key === "r") randomizeGrid();
+        else if (key === "c") copyStep();
+        else if (key === "v") pasteStep();
+        else if (key === "[") { paramIndex = (paramIndex + params.length - 1) % params.length; describe("PARAMETER PREVIOUS."); render(); }
+        else if (key === "]") { paramIndex = (paramIndex + 1) % params.length; describe("PARAMETER NEXT."); render(); }
+        else if (key === "-" || key === "=") { describe(`${params[paramIndex]} ${key === "=" ? "INCREASED" : "DECREASED"}.`); render(); }
+      }
+      seedStarter();
+      render();
+      lab.addEventListener("keydown", handleLabKey);
+      playButton.addEventListener("click", togglePlay);
+      document.querySelector("#lab-clear").addEventListener("click", clearGrid);
+      bpmInput.addEventListener("change", () => { bpmInput.value = String(bpm()); updateTimer(); describe(`TEMPO SET TO ${bpm()} BPM.`); });
+      document.querySelectorAll("[data-lab-action]").forEach((button) => button.addEventListener("click", () => {
+        const action = button.dataset.labAction;
+        if (action === "preset") { seedStarter(); describe("STARTER LOOP LOADED."); render(); }
+        if (action === "random") randomizeGrid();
+        if (action === "copy") copyStep();
+        if (action === "paste") pasteStep();
+      }));
+
+      const practiceRoot = document.querySelector("#practice-console");
+      const practiceStage = document.querySelector("#practice-stage");
+      const practiceStatus = document.querySelector("#practice-status");
+      const practicePalette = document.querySelector("#practice-palette");
+      const paletteSlots = document.querySelector("#palette-slots");
+      const synthShapes = ["SINE", "TRI", "SAW", "SQUARE", "PULSE", "NOISE"];
+      const filterModes = ["OFF", "LOWPASS", "HIGHPASS", "BANDPASS", "NOTCH"];
+      const driveModes = ["OFF", "SOFT", "HARD", "FOLD"];
+      const echoPans = ["ORIG", "LEFT", "RIGHT", "PINGPONG"];
+      const modWaves = ["RAMP DN", "RAMP UP", "TRIANGLE", "SQUARE", "RANDOM"];
+      const modDestinations = ["LEVEL", "PAN", "NOTE", "MOD DEPTH", "MOD FBK", "SWEEP", "NOISE RATE"];
+      const scaleNames = ["CHROMATIC", "MAJOR", "MINOR", "DORIAN", "MIXOLYD", "WHOLE"];
+      const scaleMasks = {
+        CHROMATIC: [true, true, true, true, true, true, true, true, true, true, true, true],
+        MAJOR: [true, false, true, false, true, true, false, true, false, true, false, true],
+        MINOR: [true, false, true, true, false, true, false, true, true, false, true, false],
+        DORIAN: [true, false, true, true, false, true, false, true, false, true, true, false],
+        MIXOLYD: [true, false, true, false, true, true, false, true, false, true, false, true],
+        WHOLE: [true, false, true, false, true, false, true, false, true, false, true, false],
+      };
+      const chromaticNotes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+      const practice = {
+        view: "SYNTH",
+        confirm: null,
+        saved: false,
+        snapshot: null,
+        grid: { mute: false, solo: false, scope: "STEP" },
+        synth: {
+          advanced: false,
+          operator: 0,
+          algorithm: 1,
+          filter: "OFF",
+          drive: "OFF",
+          unison: 1,
+          cutoff: 127,
+          resonance: 0,
+          operators: [
+            { shape: "SINE", ratio: 8, level: 96, feedback: 0, detune: 0 },
+            { shape: "SINE", ratio: 8, level: 96, feedback: 0, detune: 0 },
+            { shape: "SINE", ratio: 8, level: 96, feedback: 0, detune: 0 },
+            { shape: "SINE", ratio: 8, level: 127, feedback: 0, detune: 0 },
+          ],
+        },
+        echo: { repeats: 2, speed: 8, transpose: 0, volume: -12, pan: "PINGPONG" },
+        transpose: { values: [0, 0, 0, 0, 0, 0, 0, 0], length: 4, rate: 1, advance: "PATTERN" },
+        mod: { target: 0, destination: "MOD DEPTH", speed: 8, wave: "TRIANGLE", depth: 0, offset: 0 },
+        scale: { root: 0, preset: "CHROMATIC", mask: [...scaleMasks.CHROMATIC] },
+        data: { bank: 0, slot: 0, allTracks: false, mode: "RESET", queued: -1, slots: Array(128).fill(null) },
+        palette: { open: false, selected: 0, slots: Array.from({ length: 14 }, (_, index) => index < 5) },
+      };
+
+      function clamp(value, minimum, maximum) {
+        return Math.max(minimum, Math.min(maximum, value));
+      }
+
+      function cloneGrid() {
+        return grid.map((track) => track.map((step) => ({ ...step })));
+      }
+
+      function applyGrid(snapshot) {
+        snapshot.forEach((track, trackIndex) => track.forEach((step, stepIndex) => {
+          Object.assign(grid[trackIndex][stepIndex], step);
+        }));
+        render();
+      }
+
+      function cycle(values, current, delta = 1) {
+        const index = values.indexOf(current);
+        return values[(index + delta + values.length) % values.length];
+      }
+
+      function practiceSay(title, detail) {
+        practiceStatus.innerHTML = `<strong>${title}</strong> ${detail}`;
+      }
+
+      function hex(value) {
+        return value.toString(16).toUpperCase().padStart(2, "0");
+      }
+
+      function stepper(label, value, action, field, minimum, maximum) {
+        return `<div class="stepper"><span>${label}</span><button type="button" data-practice-action="${action}" data-field="${field}" data-delta="-1" data-min="${minimum}" data-max="${maximum}">-</button><output>${value}</output><button type="button" data-practice-action="${action}" data-field="${field}" data-delta="1" data-min="${minimum}" data-max="${maximum}">+</button></div>`;
+      }
+
+      function renderGridPractice() {
+        const active = grid.flat().filter((step) => step.active).length;
+        return `<h3>GRID WORKFLOW</h3><p>Use the dedicated Grid Lab for cursor movement and step entry. This station lets you rehearse the track-wide moves that sit around it.</p><div class="practice-columns"><section class="practice-block"><h4>LIVE TRACK</h4><p>${tracks[selectedTrack]} / ${active} active events across the five tracks.</p><div class="choice-row"><button type="button" data-practice-action="focus-grid">OPEN GRID LAB</button><button type="button" data-practice-action="grid-rotate">ROTATE TRACK</button><button type="button" data-practice-action="grid-random">RANDOMIZE TRACKS</button></div></section><section class="practice-block"><h4>TRACK STATE</h4><p>Mute, solo, and edit scope change how the same grid operation propagates.</p><div class="choice-row"><button type="button" data-practice-action="grid-mute" class="${practice.grid.mute ? "is-active" : ""}">MUTE ${practice.grid.mute ? "ON" : "OFF"}</button><button type="button" data-practice-action="grid-solo" class="${practice.grid.solo ? "is-active" : ""}">SOLO ${practice.grid.solo ? "ON" : "OFF"}</button><button type="button" data-practice-action="grid-scope">SCOPE ${practice.grid.scope}</button></div></section></div>`;
+      }
+
+      function renderSynthPractice() {
+        const synth = practice.synth;
+        const operator = synth.operators[synth.operator];
+        return `<h3>SYNTH WORKFLOW</h3><p>${synth.advanced ? "Advanced FM is active: the selected step uses four operators and the controls below." : "Legacy FM remains active. Enable Advanced to make the four-operator path editable for this step."}</p><div class="practice-columns"><section class="practice-block"><h4>ENGINE</h4><div class="choice-row"><button type="button" data-practice-action="synth-advanced" class="${synth.advanced ? "is-active" : ""}">${synth.advanced ? "ADVANCED 4-OP" : "LEGACY 2-OP"}</button><button type="button" data-practice-action="synth-algorithm" data-delta="-1">ALG -</button><button type="button" data-practice-action="synth-algorithm" data-delta="1">ALG ${synth.algorithm}</button></div><div class="operator-row">${synth.operators.map((item, index) => `<button type="button" data-practice-action="synth-operator" data-index="${index}" class="${index === synth.operator ? "is-active" : ""}">OP ${index + 1}</button>`).join("")}</div>${stepper("RATIO", operator.ratio, "synth-operator-step", "ratio", 0, 127)}${stepper("LEVEL", operator.level, "synth-operator-step", "level", 0, 127)}${stepper("FEEDBACK", operator.feedback, "synth-operator-step", "feedback", 0, 127)}${stepper("DETUNE", operator.detune, "synth-operator-step", "detune", -64, 63)}</section><section class="practice-block"><h4>SHAPE AND FINISH</h4><div class="choice-row">${synthShapes.map((shape) => `<button type="button" data-practice-action="synth-shape" data-value="${shape}" class="${operator.shape === shape ? "is-active" : ""}">${shape}</button>`).join("")}</div><div class="choice-row">${filterModes.map((mode) => `<button type="button" data-practice-action="synth-filter" data-value="${mode}" class="${synth.filter === mode ? "is-active" : ""}">${mode}</button>`).join("")}</div><div class="choice-row">${driveModes.map((mode) => `<button type="button" data-practice-action="synth-drive" data-value="${mode}" class="${synth.drive === mode ? "is-active" : ""}">${mode}</button>`).join("")}</div><div class="range-control"><label>FILTER CUTOFF<input type="range" min="0" max="127" value="${synth.cutoff}" data-practice-input="synth-cutoff"></label><output data-practice-output="synth-cutoff">${synth.cutoff}</output></div><div class="range-control"><label>UNISON VOICES<input type="range" min="1" max="4" value="${synth.unison}" data-practice-input="synth-unison"></label><output data-practice-output="synth-unison">${synth.unison}</output></div></section></div>`;
+      }
+
+      function renderEchoPractice() {
+        const echo = practice.echo;
+        return `<h3>ECHO WORKFLOW</h3><p>Echo is stored on the track and each event opts in through its <code>ECHO</code> step field. Build repeats from timing, pitch, attenuation, and pan.</p><div class="practice-columns"><section class="practice-block"><h4>REPEAT ENGINE</h4>${stepper("REPEATS", echo.repeats, "echo-step", "repeats", 0, 8)}${stepper("SPEED TICKS", echo.speed, "echo-step", "speed", 1, 96)}${stepper("TRANSPOSE", echo.transpose, "echo-step", "transpose", -24, 24)}${stepper("VOLUME DELTA", echo.volume, "echo-step", "volume", -64, 32)}</section><section class="practice-block"><h4>STEREO PATH</h4><p>Current pan behavior: <strong>${echo.pan}</strong>. Ping-pong alternates echoes between the outputs; Original preserves the event pan.</p><div class="choice-row">${echoPans.map((pan) => `<button type="button" data-practice-action="echo-pan" data-value="${pan}" class="${echo.pan === pan ? "is-active" : ""}">${pan}</button>`).join("")}</div><p>Use faster speed values and small transposition to turn Echo into an arpeggiator-style lane.</p></section></div>`;
+      }
+
+      function renderTransposePractice() {
+        const transpose = practice.transpose;
+        return `<h3>TRANSPOSE WORKFLOW</h3><p>The transpose lane has up to eight semitone offsets. It is applied only to steps with <code>TSP</code> enabled.</p><div class="transpose-grid">${transpose.values.map((value, index) => `<div class="transpose-step"><span>STEP ${index + 1}</span><button type="button" data-practice-action="transpose-step" data-index="${index}" data-delta="1">+</button><strong>${value >= 0 ? "+" : ""}${value}</strong><button type="button" data-practice-action="transpose-step" data-index="${index}" data-delta="-1">-</button></div>`).join("")}</div><div class="practice-columns" style="margin-top: 1.15rem;"><section class="practice-block"><h4>LANE CLOCK</h4>${stepper("LENGTH", transpose.length, "transpose-setting", "length", 1, 8)}${stepper("RATE", transpose.rate, "transpose-setting", "rate", 1, 16)}</section><section class="practice-block"><h4>ADVANCE</h4><p>Change when the lane moves forward: by whole pattern, by step count, or only on trigger.</p><div class="choice-row">${["PATTERN", "STEP", "TRIGGER"].map((advance) => `<button type="button" data-practice-action="transpose-advance" data-value="${advance}" class="${transpose.advance === advance ? "is-active" : ""}">${advance}</button>`).join("")}</div></section></div>`;
+      }
+
+      function renderModPractice() {
+        const mod = practice.mod;
+        return `<h3>MOD WORKFLOW</h3><p>Each origin track owns a step-sampled modulator. Route it anywhere, then set a waveform, timing, depth, and phase offset.</p><div class="practice-columns"><section class="practice-block"><h4>ROUTING</h4><div class="choice-row">${tracks.map((track, index) => `<button type="button" data-practice-action="mod-target" data-index="${index}" class="${mod.target === index ? "is-active" : ""}">${track}</button>`).join("")}</div><div class="choice-row">${modDestinations.map((destination) => `<button type="button" data-practice-action="mod-destination" data-value="${destination}" class="${mod.destination === destination ? "is-active" : ""}">${destination}</button>`).join("")}</div></section><section class="practice-block"><h4>MOTION</h4><div class="choice-row">${modWaves.map((wave) => `<button type="button" data-practice-action="mod-wave" data-value="${wave}" class="${mod.wave === wave ? "is-active" : ""}">${wave}</button>`).join("")}</div><div class="range-control"><label>SPEED<input type="range" min="1" max="64" value="${mod.speed}" data-practice-input="mod-speed"></label><output data-practice-output="mod-speed">${mod.speed}</output></div><div class="range-control"><label>DEPTH<input type="range" min="-64" max="64" value="${mod.depth}" data-practice-input="mod-depth"></label><output data-practice-output="mod-depth">${mod.depth >= 0 ? "+" : ""}${mod.depth}</output></div><div class="range-control"><label>START OFFSET<input type="range" min="0" max="63" value="${mod.offset}" data-practice-input="mod-offset"></label><output data-practice-output="mod-offset">${mod.offset}</output></div></section></div>`;
+      }
+
+      function renderScalePractice() {
+        const scale = practice.scale;
+        return `<h3>SCALE WORKFLOW</h3><p>The scale view filters note entry and quantizes playback. Notes remain stored as values, so changing scale changes their musical interpretation without rewriting the pattern.</p><div class="practice-columns"><section class="practice-block"><h4>ROOT</h4><div class="scale-grid">${chromaticNotes.map((note, index) => `<button type="button" data-practice-action="scale-root" data-index="${index}" class="${scale.root === index ? "is-active" : ""}">${note}</button>`).join("")}</div><h4 style="margin-top: 1rem;">PRESET</h4><div class="choice-row">${scaleNames.map((name) => `<button type="button" data-practice-action="scale-preset" data-value="${name}" class="${scale.preset === name ? "is-active" : ""}">${name}</button>`).join("")}</div></section><section class="practice-block"><h4>NOTE MASK</h4><p>Toggle individual degrees to create a custom mask. Active notes are quantized relative to ${chromaticNotes[scale.root]}.</p><div class="scale-grid">${chromaticNotes.map((note, index) => `<button type="button" data-practice-action="scale-note" data-index="${index}" class="${scale.mask[index] ? "is-active" : ""}">${note}</button>`).join("")}</div></section></div>`;
+      }
+
+      function renderDataPractice() {
+        const data = practice.data;
+        const start = data.bank * 16;
+        return `<h3>DATA WORKFLOW</h3><p>Pattern memory is eight banks of sixteen slots per track. Save an idea before changing it, then load or queue it in the way that suits the transition.</p><div class="bank-row">${Array.from({ length: 8 }, (_, index) => `<button type="button" data-practice-action="data-bank" data-index="${index}" class="${data.bank === index ? "is-active" : ""}">BANK ${index + 1}</button>`).join("")}</div><div class="slot-grid">${Array.from({ length: 16 }, (_, index) => { const slot = start + index; const occupied = Boolean(data.slots[slot]); const queued = data.queued === slot; return `<button type="button" data-practice-action="data-slot" data-index="${index}" class="${data.slot === index ? "is-active" : ""} ${occupied ? "is-occupied" : ""} ${queued ? "is-queued" : ""}">${hex(index)}</button>`; }).join("")}</div><div class="practice-columns" style="margin-top: 1.15rem;"><section class="practice-block"><h4>SLOT ${hex(data.slot)}</h4><div class="choice-row"><button type="button" data-practice-action="data-save">SAVE</button><button type="button" data-practice-action="data-load">LOAD ${data.mode}</button><button type="button" data-practice-action="data-queue">QUEUE</button><button type="button" data-practice-action="data-clear">CLEAR</button><button type="button" data-practice-action="data-random">RANDOM</button></div></section><section class="practice-block"><h4>TRANSITION</h4><div class="choice-row"><button type="button" data-practice-action="data-mode" class="${data.mode === "IN PLACE" ? "is-active" : ""}">MODE ${data.mode}</button><button type="button" data-practice-action="data-target" class="${data.allTracks ? "is-active" : ""}">TARGET ${data.allTracks ? "ALL 5" : "TRACK"}</button></div><p>${data.queued >= 0 ? `Queued ${hex(data.queued % 16)} waits for its boundary.` : "Queue is empty. Cue a prepared slot to change at a musical boundary."}</p></section></div>`;
+      }
+
+      function renderPracticeView() {
+        switch (practice.view) {
+          case "GRID": return renderGridPractice();
+          case "SYNTH": return renderSynthPractice();
+          case "ECHO": return renderEchoPractice();
+          case "TRANSPOSE": return renderTransposePractice();
+          case "MOD": return renderModPractice();
+          case "SCALE": return renderScalePractice();
+          case "DATA": return renderDataPractice();
+        }
+        return "";
+      }
+
+      function renderPalette() {
+        paletteSlots.innerHTML = practice.palette.slots.map((occupied, index) => `<button type="button" data-practice-action="palette-slot" data-index="${index}" class="${occupied ? "is-occupied" : ""} ${practice.palette.selected === index ? "is-active" : ""}">${hex(index)}</button>`).join("");
+        practicePalette.hidden = !practice.palette.open;
+      }
+
+      function renderPractice() {
+        practiceStage.innerHTML = renderPracticeView();
+        document.querySelectorAll("#practice-tabs [data-practice-view]").forEach((button) => {
+          button.setAttribute("aria-selected", String(button.dataset.practiceView === practice.view));
+        });
+        practiceRoot.querySelector('[data-practice-action="project-new"]').classList.toggle("is-armed", practice.confirm === "new");
+        practiceRoot.querySelector('[data-practice-action="project-clear"]').classList.toggle("is-armed", practice.confirm === "clear");
+        renderPalette();
+      }
+
+      function resetPracticeSession() {
+        seedStarter();
+        practice.grid = { mute: false, solo: false, scope: "STEP" };
+        practice.data = { bank: 0, slot: 0, allTracks: false, mode: "RESET", queued: -1, slots: Array(128).fill(null) };
+        practice.data.slots[0] = cloneGrid();
+        practice.palette.slots = Array.from({ length: 14 }, (_, index) => index < 5);
+        practice.snapshot = null;
+        practice.saved = false;
+        render();
+      }
+
+      function currentPatternIndex() {
+        return practice.data.bank * 16 + practice.data.slot;
+      }
+
+      function projectAction(action) {
+        if (action === "save") {
+          practice.saved = true;
+          practice.confirm = null;
+          practiceSay("SESSION SAVED.", "The real app writes through the existing atomic save request.");
+          renderPractice();
+          return;
+        }
+        if (practice.confirm !== action) {
+          practice.confirm = action;
+          practiceSay(`${action === "new" ? "NEW" : "CLEAR"} ARMED.`, "Click the highlighted action again to confirm in this practice session.");
+          renderPractice();
+          return;
+        }
+        if (action === "new") {
+          resetPracticeSession();
+          practiceSay("NEW SESSION READY.", "The starter loop is restored and guide-local memory is reset.");
+        } else {
+          clearGrid();
+          practice.snapshot = null;
+          practiceSay("LIVE TRACKS CLEARED.", "Pattern slots and palette slots remain available, matching the native Project menu.");
+        }
+        practice.confirm = null;
+        renderPractice();
+      }
+
+      practice.data.slots[0] = cloneGrid();
+      practiceRoot.addEventListener("input", (event) => {
+        const input = event.target;
+        if (!(input instanceof HTMLInputElement)) return;
+        const value = Number(input.value);
+        const id = input.dataset.practiceInput;
+        if (id === "synth-cutoff") practice.synth.cutoff = value;
+        else if (id === "synth-unison") practice.synth.unison = value;
+        else if (id === "mod-speed") practice.mod.speed = value;
+        else if (id === "mod-depth") practice.mod.depth = value;
+        else if (id === "mod-offset") practice.mod.offset = value;
+        else return;
+        const output = practiceStage.querySelector(`[data-practice-output="${id}"]`);
+        if (output) output.textContent = id === "mod-depth" && value >= 0 ? `+${value}` : String(value);
+        practiceSay("VALUE UPDATED.", "The practice model now reflects the selected control.");
+      });
+
+      practiceRoot.addEventListener("click", (event) => {
+        const viewButton = event.target.closest("[data-practice-view]");
+        if (viewButton) {
+          practice.view = viewButton.dataset.practiceView;
+          practice.confirm = null;
+          practiceSay(`${practice.view} READY.`, "This guide-local station exposes the same decision points as the matching app view.");
+          renderPractice();
+          return;
+        }
+        const control = event.target.closest("[data-practice-action]");
+        if (!control) return;
+        const action = control.dataset.practiceAction;
+        const value = control.dataset.value;
+        const index = Number(control.dataset.index);
+        const delta = Number(control.dataset.delta || 0);
+        if (action === "focus-grid") {
+          document.querySelector("#grid").scrollIntoView({ behavior: "smooth", block: "start" });
+          window.setTimeout(() => lab.focus(), 350);
+          return;
+        }
+        if (action === "grid-rotate") {
+          grid[selectedTrack].unshift(grid[selectedTrack].pop());
+          render();
+          practiceSay("TRACK ROTATED.", "The selected track moved forward by one step.");
+        } else if (action === "grid-random") {
+          randomizeGrid();
+          practiceSay("TRACKS RANDOMIZED.", "Use the app's R nudge for a less drastic change.");
+        } else if (action === "grid-mute") {
+          practice.grid.mute = !practice.grid.mute;
+          practiceSay(practice.grid.mute ? "MUTE ON." : "MUTE OFF.", "The app keeps mute state per track.");
+        } else if (action === "grid-solo") {
+          practice.grid.solo = !practice.grid.solo;
+          practiceSay(practice.grid.solo ? "SOLO ON." : "SOLO OFF.", "Use Shift+M in the app for the selected track.");
+        } else if (action === "grid-scope") {
+          practice.grid.scope = cycle(["STEP", "TRACK", "ALL"], practice.grid.scope);
+          practiceSay(`SCOPE ${practice.grid.scope}.`, "F5 cycles the equivalent app edit scope.");
+        } else if (action === "synth-advanced") {
+          practice.synth.advanced = !practice.synth.advanced;
+          practiceSay(practice.synth.advanced ? "ADVANCED FM ENABLED." : "LEGACY FM RESTORED.", "Advanced fields apply per step in the native engine.");
+        } else if (action === "synth-operator") {
+          practice.synth.operator = index;
+          practiceSay(`OPERATOR ${index + 1} SELECTED.`, "Shape, ratio, level, feedback, and detune now target this operator.");
+        } else if (action === "synth-shape") {
+          practice.synth.operators[practice.synth.operator].shape = value;
+          practiceSay(`${value} SELECTED.`, "Waveform changes are now attached to the selected operator.");
+        } else if (action === "synth-filter") {
+          practice.synth.filter = value;
+          practiceSay(`FILTER ${value}.`, "Cutoff and resonance shape the selected step's advanced voice.");
+        } else if (action === "synth-drive") {
+          practice.synth.drive = value;
+          practiceSay(`DRIVE ${value}.`, "Drive follows the filter in the advanced signal path.");
+        } else if (action === "synth-algorithm") {
+          practice.synth.algorithm = clamp(practice.synth.algorithm + delta, 1, 12);
+          practiceSay(`ALGORITHM ${practice.synth.algorithm}.`, "Routing decides how the four operators modulate and mix.");
+        } else if (action === "synth-operator-step") {
+          const operator = practice.synth.operators[practice.synth.operator];
+          operator[control.dataset.field] = clamp(operator[control.dataset.field] + delta, Number(control.dataset.min), Number(control.dataset.max));
+          practiceSay(`${control.dataset.field.toUpperCase()} UPDATED.`, "The selected operator now holds the new value.");
+        } else if (action === "echo-step") {
+          const field = control.dataset.field;
+          practice.echo[field] = clamp(practice.echo[field] + delta, Number(control.dataset.min), Number(control.dataset.max));
+          practiceSay(`ECHO ${field.toUpperCase()} UPDATED.`, "This track-level effect will apply to events with Echo enabled.");
+        } else if (action === "echo-pan") {
+          practice.echo.pan = value;
+          practiceSay(`ECHO PAN ${value}.`, "The repeat stereo motion is now set.");
+        } else if (action === "transpose-step") {
+          practice.transpose.values[index] = clamp(practice.transpose.values[index] + delta, -48, 48);
+          practiceSay(`TRANSPOSE STEP ${index + 1} UPDATED.`, "The lane stores semitone offsets relative to the current scale.");
+        } else if (action === "transpose-setting") {
+          const field = control.dataset.field;
+          practice.transpose[field] = clamp(practice.transpose[field] + delta, Number(control.dataset.min), Number(control.dataset.max));
+          practiceSay(`TRANSPOSE ${field.toUpperCase()} UPDATED.`, "The lane clock has changed.");
+        } else if (action === "transpose-advance") {
+          practice.transpose.advance = value;
+          practiceSay(`ADVANCE ${value}.`, "The transpose lane will move at the selected event boundary.");
+        } else if (action === "mod-target") {
+          practice.mod.target = index;
+          practiceSay(`MOD TARGET ${tracks[index]}.`, "The modulator remains stored on its origin track.");
+        } else if (action === "mod-destination") {
+          practice.mod.destination = value;
+          practiceSay(`MOD DESTINATION ${value}.`, "New incoming events receive this step-sampled modulation.");
+        } else if (action === "mod-wave") {
+          practice.mod.wave = value;
+          practiceSay(`MOD WAVE ${value}.`, "Waveform selection changes the per-step curve.");
+        } else if (action === "scale-root") {
+          practice.scale.root = index;
+          practiceSay(`SCALE ROOT ${chromaticNotes[index]}.`, "The mask remains relative while note names shift.");
+        } else if (action === "scale-preset") {
+          practice.scale.preset = value;
+          practice.scale.mask = [...scaleMasks[value]];
+          practiceSay(`${value} SCALE.`, "The scale mask now controls entry and playback quantization.");
+        } else if (action === "scale-note") {
+          practice.scale.mask[index] = !practice.scale.mask[index];
+          practice.scale.preset = "CUSTOM";
+          practiceSay(`${chromaticNotes[index]} ${practice.scale.mask[index] ? "ENABLED" : "DISABLED"}.`, "The scale is now a custom mask.");
+        } else if (action === "data-bank") {
+          practice.data.bank = index;
+          practice.data.slot = 0;
+          practiceSay(`BANK ${index + 1} SELECTED.`, "Each bank contains sixteen slots per track.");
+        } else if (action === "data-slot") {
+          practice.data.slot = index;
+          practiceSay(`SLOT ${hex(index)} SELECTED.`, practice.data.slots[currentPatternIndex()] ? "The slot is occupied." : "The slot is empty.");
+        } else if (action === "data-save") {
+          practice.data.slots[currentPatternIndex()] = cloneGrid();
+          practiceSay(`SLOT ${hex(practice.data.slot)} SAVED.`, "The current guide grid is now available to load or queue.");
+        } else if (action === "data-load") {
+          const stored = practice.data.slots[currentPatternIndex()];
+          if (!stored) practiceSay("EMPTY SLOT.", "Save or randomize a pattern before loading it.");
+          else { applyGrid(stored); practiceSay(`SLOT ${hex(practice.data.slot)} LOADED ${practice.data.mode}.`, "The guide grid now reflects the stored pattern."); }
+        } else if (action === "data-queue") {
+          if (!practice.data.slots[currentPatternIndex()]) practiceSay("EMPTY SLOT.", "Only stored patterns can be queued.");
+          else { practice.data.queued = currentPatternIndex(); practiceSay(`SLOT ${hex(practice.data.slot)} QUEUED.`, "The native app applies cues at a safe loop or global boundary."); }
+        } else if (action === "data-clear") {
+          practice.data.slots[currentPatternIndex()] = null;
+          if (practice.data.queued === currentPatternIndex()) practice.data.queued = -1;
+          practiceSay(`SLOT ${hex(practice.data.slot)} CLEARED.`, "Only stored memory changed; the live grid is intact.");
+        } else if (action === "data-random") {
+          randomizeGrid();
+          practiceSay("LIVE PATTERN RANDOMIZED.", "Save it to a slot if it is worth keeping.");
+        } else if (action === "data-mode") {
+          practice.data.mode = practice.data.mode === "RESET" ? "IN PLACE" : "RESET";
+          practiceSay(`LOAD MODE ${practice.data.mode}.`, "Reset realigns the selected track; In Place preserves its phase.");
+        } else if (action === "data-target") {
+          practice.data.allTracks = !practice.data.allTracks;
+          practiceSay(practice.data.allTracks ? "TARGET ALL 5 TRACKS." : "TARGET CURRENT TRACK.", "Whole columns can switch together at a global boundary.");
+        } else if (action === "snapshot") {
+          if (!practice.snapshot) {
+            practice.snapshot = cloneGrid();
+            practiceSay("SNAPSHOT CAPTURED.", "Change the live grid, then press Snapshot again to swap states.");
+          } else {
+            const live = cloneGrid();
+            applyGrid(practice.snapshot);
+            practice.snapshot = live;
+            practiceSay("SNAPSHOT SWAPPED.", "The previous live state is now the alternate snapshot.");
+          }
+        } else if (action === "palette") {
+          practice.palette.open = true;
+          practiceSay("PALETTE OPEN.", "Select a sound slot, then recall, store, apply, randomize, or clear.");
+        } else if (action === "palette-close") {
+          practice.palette.open = false;
+        } else if (action === "palette-slot") {
+          practice.palette.selected = index;
+          practiceSay(`PALETTE ${hex(index)} SELECTED.`, practice.palette.slots[index] ? "This sound slot is occupied." : "This sound slot is empty.");
+        } else if (action === "palette-store") {
+          practice.palette.slots[practice.palette.selected] = true;
+          practiceSay(`PALETTE ${hex(practice.palette.selected)} STORED.`, "The selected step's sound design is now reusable.");
+        } else if (action === "palette-load") {
+          if (!practice.palette.slots[practice.palette.selected]) practiceSay("EMPTY SOUND SLOT.", "Store or randomize a sound first.");
+          else { grid[selectedTrack][selectedStep].active = true; render(); practiceSay("SOUND RECALLED TO STEP.", "Sequence data stayed in place while the sound changed."); }
+        } else if (action === "palette-track") {
+          if (!practice.palette.slots[practice.palette.selected]) practiceSay("EMPTY SOUND SLOT.", "Store or randomize a sound first.");
+          else practiceSay("SOUND APPLIED TO TRACK.", "The native palette action copies sound design to every step on the selected track.");
+        } else if (action === "palette-random") {
+          practice.palette.slots[practice.palette.selected] = true;
+          practice.synth.operators[practice.synth.operator].ratio = Math.floor(Math.random() * 128);
+          practiceSay("RANDOM SOUND GENERATED.", "Store it to retain the new sound design.");
+        } else if (action === "palette-clear") {
+          practice.palette.slots[practice.palette.selected] = false;
+          practiceSay(`PALETTE ${hex(practice.palette.selected)} CLEARED.`, "The live event remains unchanged.");
+        } else if (action === "project-new") {
+          projectAction("new");
+        } else if (action === "project-clear") {
+          projectAction("clear");
+        } else if (action === "project-save") {
+          projectAction("save");
+        }
+        renderPractice();
+      });
+      renderPractice();
+
+      const filter = document.querySelector("#shortcut-filter");
+      const shortcutRows = [...document.querySelectorAll(".shortcut-row")];
+      const count = document.querySelector("#shortcut-count");
+      function filterShortcuts() {
+        const query = filter.value.trim().toLowerCase();
+        let shown = 0;
+        shortcutRows.forEach((row) => {
+          const match = !query || `${row.dataset.search} ${row.textContent}`.toLowerCase().includes(query);
+          row.hidden = !match;
+          if (match) shown += 1;
+        });
+        count.textContent = `${shown} CONTROL${shown === 1 ? "" : "S"}`;
+      }
+      filter.addEventListener("input", filterShortcuts);
+      filterShortcuts();
+      const themeToggle = document.querySelector("#theme-toggle");
+      themeToggle.addEventListener("click", () => {
+        const light = document.documentElement.dataset.theme !== "light";
+        document.documentElement.dataset.theme = light ? "light" : "dark";
+        themeToggle.textContent = `THEME: ${light ? "LIGHT" : "DARK"}`;
+        themeToggle.setAttribute("aria-pressed", String(light));
+      });
+      document.querySelector("#focus-lab").addEventListener("click", () => {
+        document.querySelector("#grid").scrollIntoView({ behavior: "smooth", block: "start" });
+        window.setTimeout(() => lab.focus(), 350);
+      });
+      const chapterLinks = [...document.querySelectorAll(".rail nav a")];
+      const chapters = chapterLinks.map((link) => document.querySelector(link.getAttribute("href"))).filter(Boolean);
+      const observer = new IntersectionObserver((entries) => {
+        const active = entries.filter((entry) => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (!active) return;
+        chapterLinks.forEach((link) => link.setAttribute("aria-current", String(link.getAttribute("href") === `#${active.target.id}`)));
+      }, { rootMargin: "-20% 0px -65% 0px", threshold: [0, 0.1, 0.3] });
+      chapters.forEach((chapter) => observer.observe(chapter));
+    })();
+  </script>
+</body>
+</html>

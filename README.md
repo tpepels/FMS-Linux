@@ -2,7 +2,11 @@
 
 FMS Linux is a native desktop interpretation of the five-track FM step sequencer described in the supplied FMS manual. It runs directly on Linux—no GBA ROM or emulator is involved—and keeps the original instrument's central idea: every step owns its sound.
 
-The application combines four two-operator FM tracks with one PSG-style LFSR noise track, a polymetric 16-step sequencer, per-step synthesis, pattern memory, snapshots, algorithmic echo, transpose lanes, and per-track step modulators.
+The application combines four hybrid FM tracks with one PSG-style LFSR noise track, a polymetric 16-step sequencer, per-step synthesis, pattern memory, snapshots, algorithmic echo, transpose lanes, and per-track step modulators. Every FM step can use the original two-operator engine or an advanced four-operator engine with 12 algorithms, six oscillator shapes, ADSR, four modulation slots, multimode filtering, drive, and stereo unison.
+
+## Interactive field guide
+
+Open [docs/guide.html](docs/guide.html) in a browser for an interactive walkthrough: a keyboard-operable grid playground, a stateful seven-view Practice Console for synthesis/effects/pattern workflows, palette and snapshot exercises, guarded project actions, a searchable control reference, and an actual application render.
 
 ## Build and run
 
@@ -36,6 +40,9 @@ sudo make install
 
 - `Space` — start or stop the sequencer
 - Arrow keys — move between tracks and steps
+- `Shift+Arrow keys` — create or extend a rectangular range
+- `F5` — cycle edit scope through step/range, track, and all tracks
+- `F6` — toggle the context-sensitive key-hints side panel
 - `Enter` — place or remove a trigger
 - `Delete` / `Backspace` — clear the selected step
 - `[` / `]` — select the parameter to edit
@@ -43,25 +50,49 @@ sudo make install
 - `1`–`5` — jump to a track
 - `,` / `.` — lower or raise BPM; hold `Shift` for 10 BPM steps
 - `Alt+Left/Right` — change the selected track's rate
-- `Alt+Up/Down` — change the selected track's shuffle
+- `Alt+Up/Down` — change shuffle; add `Ctrl` to change all tracks
 - `L` / `Shift+L` — increase or decrease track length
-- `D` / `Shift+D` — cycle track direction
-- `Tab` / `Shift+Tab` — move between Grid, Echo, Transpose, Mod, Scale, and Data
-- `C` / `V` — copy or paste the selected step
+- `D` / `Shift+D` — cycle direction for the selected track / all tracks
+- `O` / `Shift+O` — rotate a track or range forward / backward; add `Ctrl` for all tracks
+- `Tab` / `Shift+Tab` — move between Grid, Synth, Echo, Transpose, Mod, Scale, and Data
+- `C` / `X` / `V` — copy, cut, or paste a step or rectangular range
 - `T` — toggle a trigless step
-- `R` — randomize the selected track
+- `R` — incrementally randomize the selected parameter over the active scope
+- `Shift+R` — generate a new random pattern for the selected track
 - `M` / `Shift+M` — mute or solo the selected track
+- `U` — unmute and clear solo on every track
+- `P` — open the FM or noise sound palette
 - `S` — capture or recall the performance snapshot
+- `Ctrl+N` — open Project actions with Start New selected
+- `Ctrl+Shift+Backspace` — open Project actions with Clear Working Tracks selected
 - `Ctrl+S` — save immediately
 - `F1` or `?` — open the in-app control reference
 - `F2` / `F3` — change theme or accent color
-- `K` in Data — lock or unlock the selected bank
+- `F4` — open controller mapping; mappings are saved with the project
 
-The interface is mouse-aware: click tracks, steps, view tabs, and parameters; use the wheel to adjust the selected field or the track-header value beneath it. The specialized views expose the echo engine, transpose sequence, step modulator, scale mask, and 8 × 16 pattern library. `Shift+click` stores a pattern; selecting a pattern while playing cues it at that track's next available, not-yet-scheduled nominal loop boundary without resetting the other tracks. A negative microtime offset on the incoming pattern's first step is clipped to that boundary so the new pattern never sounds before the old one finishes. Current shortcut hints are always shown along the bottom edge.
+The Synth view exposes all 50 advanced fields for the selected FM step. `Page Up` / `Page Down` changes the step without leaving the view, while the normal field, value, range, and scope controls continue to work.
+
+In the Palette overlay, `Enter` recalls a sound, `Shift+Enter` stores the selected step's sound, and `Ctrl+Enter` applies it to the whole track. `X` and `?` clear or generate a sound; slots `0`–`D` are the 14 persistent user sounds for the current FM/noise engine. Palette actions copy sound design only, leaving sequence triggers, notes, levels, panning, and timing intact.
+
+The Data view has explicit live-performance controls:
+
+- `A` — target the selected track or the whole five-track column
+- `I` — choose load-in-place or track-local load-and-reset
+- `Enter` / `Shift+Enter` / `Q` — load, save, or cue the selected slot/column
+- Select `X` / `?` — clear or randomize the current target
+- `N` / `K` — rename or lock the selected bank
+- `B` / `G` — recall bank BPM / scale; hold `Shift` to store or `Alt` for timed recall
+- `Ctrl+B` / `Ctrl+G` — arm stored BPM / scale to change atomically with the next cue
+
+The header **Project** menu offers the same session-level operations by mouse: Start New restores the starter session while preserving theme, accent, and controller preferences; Clear Working Tracks clears only the five live tracks and keeps banks, palettes, and stored patterns; Save Now writes through the existing atomic save path. New and Clear require a second confirmation.
+
+The interface is mouse-aware: click tracks, steps, view tabs, parameters, pattern operations, and overlay slots; use the wheel to adjust the selected field or the track-header value beneath it. Single-track cues change at that track's next available nominal loop boundary. Whole-column cues and their optional BPM/scale payload change atomically at the next global 16-step boundary. A negative microtime offset on an incoming pattern's first step is clipped to its transition boundary so the new pattern never sounds early. `F6` or the header Hints control opens a non-modal side panel whose key hints adapt to the current view and active overlay.
 
 ## Instrument behavior
 
-Each FM trigger stores its own amplitude attack/hold/release, fractional modulator ratio, modulation depth and feedback, modulation envelope, pitch sweep, routing mode, note, level, pan, portamento, trigger condition, microtiming, chord allocation, echo send, and transpose enable state. Trigless steps update a sounding voice without resetting its phase or envelopes.
+Each legacy FM trigger stores its own amplitude attack/hold/release, fractional modulator ratio, modulation depth and feedback, modulation envelope, pitch sweep, routing mode, note, level, pan, portamento, trigger condition, microtiming, chord allocation, echo send, and transpose enable state. Trigless steps update a sounding voice without resetting its phase or envelopes.
+
+Advanced FM is opt-in per step, so old sounds retain the original rendering path. Its four operators each have waveform, fractional ratio, level, feedback, and fine detune. Twelve routing algorithms feed an ADSR amplifier, four freely routed LFO/envelope modulation slots, low/high/band/notch filtering with resonance, soft/hard/fold drive, and one-to-four-voice stereo unison. Advanced parameters are available to range, track, all-track, palette, pattern, snapshot, and preview workflows just like legacy fields.
 
 Track clocks have independent length, rate, traversal direction, and shuffle. The audio callback advances those clocks at sample resolution. Chord tones share the four-voice FM pool; the noise track uses a configurable 15-bit or narrow 7-bit LFSR. Stereo panning is deliberately discrete: left, center, or right.
 
@@ -75,12 +106,12 @@ State is saved automatically on exit and with `Ctrl+S`. The default location fol
 $XDG_DATA_HOME/fms-linux/state.bin
 ```
 
-When `XDG_DATA_HOME` is unset, FMS uses `~/.local/share/fms-linux/state.bin`. Saves are versioned, checksummed, and replaced atomically so an interrupted write does not damage the previous session. Use `--save-path FILE` to keep a separate set.
+When `XDG_DATA_HOME` is unset, FMS uses `~/.local/share/fms-linux/state.bin`. Saves are versioned, checksummed, and replaced atomically so an interrupted write does not damage the previous session. Format 1.1 loads existing 1.0 files with advanced synthesis disabled and default controller mappings, preserving their original sound. Use `--save-path FILE` to keep a separate set.
 
 ## Verification and command-line options
 
 ```sh
-make test          # model, save, audio, UI-event, and render tests
+make test          # model, migration/save, DSP/transport, UI-event, and render tests
 make screenshot    # headless UI render to fms-ui.bmp
 make audio-smoke   # exercise the real-time engine with SDL's dummy driver
 ./fms-linux --help
@@ -91,8 +122,8 @@ Useful launch flags include `--play`, `--no-audio`, `--run-for SEC`, `--screensh
 ## Project layout
 
 - `src/model.*` — instrument state, defaults, scale/rate helpers, randomization
-- `src/audio.*` — SDL audio device, voice DSP, event queues, track clocks
-- `src/ui.*` — SDL renderer, embedded pixel type, editing and alternate views
+- `src/audio.*` — SDL audio device, legacy/advanced voice DSP, event queues, track clocks
+- `src/ui.*` — SDL renderer, embedded pixel type, range/palette/Data/controller workflows
 - `src/persistence.*` — versioned on-disk encoding and atomic writes
 - `packaging/` — freedesktop launcher and icon
 
@@ -100,4 +131,6 @@ FMS Linux uses no web view, game-console emulator, plug-in host, or bundled bina
 
 ## Current scope
 
-This release implements the manual's core instrument and headline sequencer feature set with desktop-native controls. Console-specific flash/link workflows and configurable GBA button mappings do not apply. External clock sync, range/all-track editing and rotation, incremental parameter randomization, separate load-in-place/load-reset commands, Data-view slot clear/random commands, the sound-palette overlay, bank renaming and bank-level BPM/scale recall, and the manual's tap/nudge/queued-tempo gestures are not exposed in the current Linux UI. The internal clock and all live synthesis, per-step sound editing, polymeter, modulation, snapshot, echo, scale, track randomization, and per-track pattern storage/cueing operate natively.
+This release implements the supplied manual's core instrument plus its range, all-track, palette, column-pattern, bank, load-mode, and controller workflows with desktop-native controls. Console-specific ROM, cartridge-save, flash/link, and GBA deployment procedures do not apply. External clock sync and the manual's tap-tempo, temporary tempo-nudge, and free queued-tempo editing gestures remain outside the current build; stored bank tempos can still be recalled immediately, timed independently, or armed with a pattern cue.
+
+The advanced engine is M8-inspired sound-design depth inside FMS, not an M8 clone or compatibility layer. It deliberately retains FMS's five-track, per-step-patch sequencer and does not add the M8's sampler, wavetable engines, song/phrase architecture, MIDI workstation features, or file formats.
