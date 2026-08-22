@@ -1851,11 +1851,13 @@ make
                 </li>
               </ul>
               <p>
-                Open <strong>SYNTH</strong> with <kbd>Tab</kbd> and use
-                <kbd>Page Up</kbd>/<kbd>Page Down</kbd> to audition neighboring
-                steps without losing the focused field. Advanced fields work
-                with range, track, all-track, palette, pattern, snapshot, and
-                preview workflows.
+                Open <strong>SYNTH</strong> with <kbd>Tab</kbd>. Basic mode puts
+                12 ambient-friendly macros beside a live four-operator routing
+                diagram; press <kbd>B</kbd> for the grouped 50-field Deep
+                editor. <kbd>Page Up</kbd>/<kbd>Page Down</kbd> auditions
+                neighboring steps without losing focus. Both modes work with
+                range, track, all-track, palette, pattern, snapshot, and preview
+                workflows.
               </p>
             </div>
           </div>
@@ -2056,7 +2058,7 @@ make
         <section class="guide-section" id="saving">
           <div class="section-head">
             <p class="eyebrow">08 / State and files</p>
-            <h2>Save one state well</h2>
+            <h2>Save, recover, and keep experimenting</h2>
             <p>
               FMS Linux keeps project state in a versioned, checksummed,
               atomically replaced file. A partial write cannot overwrite the
@@ -2069,11 +2071,15 @@ make
               <pre><code>$XDG_DATA_HOME/fms-linux/state.bin
 ~/.local/share/fms-linux/state.bin when XDG_DATA_HOME is unset</code></pre>
               <p>
-                Use <code>--save-path FILE</code> to open a separate working
-                state. This is useful for a set, an experiment, or a clean
-                tutorial session. The header <strong>PROJECT</strong> menu
-                exposes Start New, Clear Working Tracks, and Save Now; New and
-                Clear require a confirmation step.
+                Named and recovery projects live in the sibling
+                <code>projects/</code> directory. Use
+                <code>--save-path FILE</code> to open a separate working state.
+                The header <strong>PROJECT</strong> menu exposes Start New,
+                Clear Working Tracks, Save, Save As, and Open Recent. Drop any
+                <code>.fms</code> file onto the application window to open a
+                downloaded, moved, or backup project outside that managed list.
+                New and Open preserve dirty work first; a failed save cancels
+                the transition, and an unreadable original is never overwritten.
               </p>
             </div>
             <div>
@@ -2095,10 +2101,11 @@ make audio-smoke
             <p class="eyebrow">09 / Control reference</p>
             <h2>Find the move, then make it muscle memory</h2>
             <p>
-              Filter by the action you want. <kbd>F6</kbd> opens a non-modal
-              side panel that changes its hints for the active view or overlay;
-              <kbd>F1</kbd> or <kbd>?</kbd> opens the full control reference
-              without leaving FMS Linux.
+              Filter by the action you want. <kbd>Ctrl</kbd> + <kbd>K</kbd>
+              opens the command palette. <kbd>F6</kbd> opens contextual help as
+              a reserved inspector on wide windows or a non-modal overlay on
+              compact ones; <kbd>F1</kbd> or <kbd>?</kbd> opens the full control
+              reference without leaving FMS Linux.
             </p>
           </div>
           <div class="shortcut-toolbar">
@@ -2157,8 +2164,37 @@ make audio-smoke
               <div class="shortcut-keys"><kbd>F6</kbd></div>
               <div class="shortcut-name">CONTEXT HINTS</div>
               <div class="shortcut-note">
-                Toggle the non-modal side panel with the shortcuts for the
-                active view or overlay.
+                Toggle responsive hints for the active view or overlay.
+              </div>
+            </div>
+            <div class="shortcut-row" data-search="onboarding beginner ambient loop guide">
+              <div class="shortcut-keys"><kbd>F7</kbd></div>
+              <div class="shortcut-name">QUICK START</div>
+              <div class="shortcut-note">
+                Dismiss or reopen the four-step ambient-loop walkthrough.
+              </div>
+            </div>
+            <div class="shortcut-row" data-search="data perform manage compare grid">
+              <div class="shortcut-keys"><kbd>F8</kbd><kbd>F9</kbd></div>
+              <div class="shortcut-name">WORKSPACE MODES</div>
+              <div class="shortcut-note">
+                Toggle Data Perform/Manage or Grid parameter comparison.
+              </div>
+            </div>
+            <div class="shortcut-row" data-search="undo redo history safe edit">
+              <div class="shortcut-keys">
+                <kbd>Ctrl</kbd><kbd>Z</kbd><kbd>Ctrl</kbd><kbd>Y</kbd>
+              </div>
+              <div class="shortcut-name">UNDO / REDO</div>
+              <div class="shortcut-note">
+                Restore or reapply project edits, including applied pattern loads.
+              </div>
+            </div>
+            <div class="shortcut-row" data-search="command palette discover actions">
+              <div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>K</kbd></div>
+              <div class="shortcut-name">COMMAND PALETTE</div>
+              <div class="shortcut-note">
+                Find major workflows without memorizing every key.
               </div>
             </div>
             <div
@@ -2327,8 +2363,8 @@ make audio-smoke
               <div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>N</kbd></div>
               <div class="shortcut-name">PROJECT MENU</div>
               <div class="shortcut-note">
-                Open Start New, Clear Working Tracks, and Save Now. New is
-                confirmation guarded.
+                Open New, Clear, Save, Save As, and Open Recent. Destructive
+                actions are confirmation guarded.
               </div>
             </div>
             <div
@@ -2349,6 +2385,15 @@ make audio-smoke
               <div class="shortcut-name">SAVE NOW</div>
               <div class="shortcut-note">
                 Write the current state immediately.
+              </div>
+            </div>
+            <div class="shortcut-row" data-search="save as named project file">
+              <div class="shortcut-keys">
+                <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>S</kbd>
+              </div>
+              <div class="shortcut-name">SAVE AS</div>
+              <div class="shortcut-note">
+                Create a collision-safe named project without replacing another.
               </div>
             </div>
             <div class="shortcut-row" data-search="help control reference">

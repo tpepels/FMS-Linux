@@ -69,6 +69,22 @@ void sanitizeController(ControllerSettings& controller) {
     }
 }
 
+void sanitizePatternMetadata(PatternMetadata& metadata) {
+    bool terminated = false;
+    for (std::size_t index = 0; index < kPatternMetadataNameLength; ++index) {
+        char& character = metadata.name[index];
+        if (terminated || character == '\0') {
+            character = '\0';
+            terminated = true;
+            continue;
+        }
+        const auto raw = static_cast<unsigned char>(character);
+        if (raw < 0x20U || raw > 0x7EU) character = ' ';
+    }
+    metadata.name[kPatternMetadataNameLength] = '\0';
+    if (metadata.color > 5U) metadata.color = 0;
+}
+
 template <typename Random>
 void randomizeAdvancedFm(AdvancedFmPatch& patch, bool fmTrack, Random& random) {
     std::uniform_int_distribution<int> percent(0, 99);
@@ -314,6 +330,11 @@ AppState makeDefaultState() {
         state.patterns[track][0].occupied = true;
         state.patterns[track][0].track = state.tracks[track];
     }
+    constexpr std::array<char, kPatternMetadataNameLength + 1> starterName {
+        'S', 'T', 'A', 'R', 'T', 'E', 'R', '\0'
+    };
+    state.patternMetadata[0].name = starterName;
+    state.patternMetadata[0].color = 1;
     return state;
 }
 
@@ -344,6 +365,7 @@ void sanitize(AppState& state) {
         sanitizeTrack(state.tracks[trackIndex]);
         for (auto& pattern : state.patterns[trackIndex]) sanitizeTrack(pattern.track);
     }
+    for (auto& metadata : state.patternMetadata) sanitizePatternMetadata(metadata);
     for (auto& step : state.fmPalette) sanitizeStep(step);
     for (auto& step : state.noisePalette) sanitizeStep(step);
     for (auto& bank : state.banks) {

@@ -8,6 +8,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -288,6 +290,59 @@ Tag readTagAt(const Bytes& bytes, std::size_t position) {
                 bytes[position + 3U]};
 }
 
+Bytes makeVersion11FixtureWithoutProjectMetadata(const Bytes& current) {
+    constexpr Tag patternMetadataTag {'P', 'M', 'E', 'T'};
+    constexpr Tag uiStateTag {'U', 'I', 'S', 'T'};
+    if (current.size() < kLegacyHeaderSize) {
+        throw std::runtime_error("current fixture lacks a complete header");
+    }
+    const std::uint32_t headerSize = readU32At(current, 12U);
+    if (headerSize > current.size() || current.size() - headerSize < 4U) {
+        throw std::runtime_error("current fixture has an invalid payload offset");
+    }
+
+    std::size_t position = headerSize;
+    const std::uint32_t sectionCount = readU32At(current, position);
+    position += 4U;
+    Writer payload;
+    payload.putU32(7U);
+    std::uint32_t copied = 0;
+    for (std::uint32_t index = 0; index < sectionCount; ++index) {
+        if (position > current.size() || current.size() - position < 12U) {
+            throw std::runtime_error("current fixture has a truncated section header");
+        }
+        const std::size_t sectionStart = position;
+        const Tag tag = readTagAt(current, position);
+        const std::uint32_t length = readU32At(current, position + 8U);
+        position += 12U;
+        if (length > current.size() - position) {
+            throw std::runtime_error("current fixture has a truncated section body");
+        }
+        position += length;
+        if (tag != patternMetadataTag && tag != uiStateTag) {
+            payload.putRaw(current.data() + sectionStart, position - sectionStart);
+            ++copied;
+        }
+    }
+    if (position != current.size() || copied != 7U) {
+        throw std::runtime_error("could not derive a seven-section 1.1 fixture");
+    }
+
+    Writer header;
+    header.putRaw(kLegacyMagic.data(), kLegacyMagic.size());
+    header.putU16(1U);
+    header.putU16(1U);
+    header.putU32(kLegacyHeaderSize);
+    header.putU64(static_cast<std::uint64_t>(payload.size()));
+    header.putU32(crc32(payload.data().data(), payload.size()));
+    header.putU32(crc32(header.data().data(), header.size()));
+
+    Writer file;
+    file.putRaw(header.data().data(), header.size());
+    file.putRaw(payload.data().data(), payload.size());
+    return file.data();
+}
+
 void expectCurrentSchema(const Bytes& bytes) {
     constexpr Tag globalTag {'G', 'L', 'O', 'B'};
     constexpr Tag tracksTag {'T', 'R', 'A', 'K'};
@@ -296,13 +351,15 @@ void expectCurrentSchema(const Bytes& bytes) {
     constexpr Tag fmPaletteTag {'F', 'M', 'P', 'A'};
     constexpr Tag noisePaletteTag {'N', 'S', 'P', 'A'};
     constexpr Tag controllerTag {'C', 'T', 'R', 'L'};
+    constexpr Tag patternMetadataTag {'P', 'M', 'E', 'T'};
+    constexpr Tag uiStateTag {'U', 'I', 'S', 'T'};
 
     if (bytes.size() < kLegacyHeaderSize) {
         expect(false, "current save has a complete header");
         return;
     }
-    expect(readU16At(bytes, 8U) == 1U && readU16At(bytes, 10U) == 1U,
-           "current save advertises format 1.1");
+    expect(readU16At(bytes, 8U) == 1U && readU16At(bytes, 10U) == 2U,
+           "current save advertises format 1.2");
     const std::uint32_t headerSize = readU32At(bytes, 12U);
     if (headerSize > bytes.size() || bytes.size() - headerSize < 4U) {
         expect(false, "current save has a valid payload offset");
@@ -312,7 +369,7 @@ void expectCurrentSchema(const Bytes& bytes) {
     std::size_t position = headerSize;
     const std::uint32_t sectionCount = readU32At(bytes, position);
     position += 4U;
-    expect(sectionCount == 7U, "current save writes seven sections");
+    expect(sectionCount == 9U, "current save writes nine sections");
 
     bool sawGlobal = false;
     bool sawTracks = false;
@@ -321,6 +378,8 @@ void expectCurrentSchema(const Bytes& bytes) {
     bool sawFmPalette = false;
     bool sawNoisePalette = false;
     bool sawController = false;
+    bool sawPatternMetadata = false;
+    bool sawUiState = false;
     for (std::uint32_t index = 0; index < sectionCount; ++index) {
         if (position > bytes.size() || bytes.size() - position < 12U) {
             throw std::runtime_error("current save has a truncated section header");
@@ -358,13 +417,25 @@ void expectCurrentSchema(const Bytes& bytes) {
             expect(version == 1U, "CTRL uses section version 1");
             expect(length == 1U + fms::kControllerActionCount,
                    "CTRL stores one enabled byte and one byte per action");
+        } else if (tag == patternMetadataTag) {
+            sawPatternMetadata = true;
+            expect(version == 1U, "PMET uses section version 1");
+            const std::size_t expectedLength =
+                2U + static_cast<std::size_t>(fms::kPatternCount) *
+                         (fms::kPatternMetadataNameLength + 2U);
+            expect(length == expectedLength,
+                   "PMET stores a fixed label and color for every pattern column");
+        } else if (tag == uiStateTag) {
+            sawUiState = true;
+            expect(version == 1U && length == 1U,
+                   "UIST v1 stores the first-run preference");
         }
         position += length;
     }
     expect(position == bytes.size(), "current save sections consume the entire payload");
     expect(sawGlobal && sawTracks && sawPatterns && sawBanks && sawFmPalette &&
-               sawNoisePalette && sawController,
-           "current save contains every required and optional phase-2 section");
+               sawNoisePalette && sawController && sawPatternMetadata && sawUiState,
+           "current save contains every required and optional project section");
 }
 
 fms::AdvancedFmPatch makeAdvancedPatch() {
@@ -424,6 +495,20 @@ struct DirectoryCleanup {
     }
 };
 
+struct EnvironmentRestore {
+    explicit EnvironmentRestore(const char* variable) : name(variable) {
+        if (const char* value = std::getenv(variable); value != nullptr) previous = value;
+    }
+    ~EnvironmentRestore() {
+        if (previous.has_value())
+            (void)::setenv(name.c_str(), previous->c_str(), 1);
+        else
+            (void)::unsetenv(name.c_str());
+    }
+    std::string name;
+    std::optional<std::string> previous;
+};
+
 } // namespace
 
 int main() {
@@ -432,6 +517,7 @@ int main() {
     try {
         const DirectoryCleanup temporary {makeTemporaryDirectory()};
         const fs::path legacyPath = temporary.path / "legacy-v1.0.state";
+        const fs::path version11Path = temporary.path / "legacy-v1.1.state";
         const fs::path currentPath = temporary.path / "current.state";
         const fs::path corruptPath = temporary.path / "corrupt.state";
 
@@ -498,6 +584,10 @@ int main() {
                "legacy Step-bearing sections receive safe disabled advanced defaults");
         expect(legacyLoaded.controller == ControllerSettings {},
                "legacy save without CTRL receives default controller mappings");
+        expect(legacyLoaded.patternMetadata ==
+                   std::array<PatternMetadata, kPatternCount> {} &&
+                   !legacyLoaded.onboardingDismissed,
+               "legacy save without project metadata receives neutral labels and first-run state");
 
         AppState current = makeDefaultState();
         current.bpm = 219;
@@ -531,9 +621,17 @@ int main() {
             31, kControllerButtonUnbound, 29, 28, 27, 26, 25, 24, 23,
             22, 21, 20, 19, 18, 17, 16, 15, 14,
         }};
+        current.patternMetadata[0].name = {
+            'A', 'M', 'B', 'I', 'E', 'N', 'T', ' ', 'A', '\0'};
+        current.patternMetadata[0].color = 2;
+        current.patternMetadata[127].name = {
+            'L', 'O', 'N', 'G', ' ', 'T', 'A', 'I', 'L', '\0'};
+        current.patternMetadata[127].color = 5;
+        current.onboardingDismissed = true;
 
         expect(saveState(current, currentPath.string(), error), "save current state: " + error);
-        expectCurrentSchema(readFile(currentPath));
+        const Bytes currentBytes = readFile(currentPath);
+        expectCurrentSchema(currentBytes);
         AppState roundTrip;
         expect(loadState(roundTrip, currentPath.string(), error), "load current state: " + error);
         expect(roundTrip.bpm == 219 && roundTrip.patterns[4][127].occupied,
@@ -556,6 +654,24 @@ int main() {
                "advanced FM fields round-trip in both sound palettes");
         expect(roundTrip.controller == current.controller,
                "controller enabled state and every action mapping round-trip");
+        expect(roundTrip.patternMetadata == current.patternMetadata,
+               "all shared pattern-column names and colors round-trip");
+        expect(roundTrip.onboardingDismissed,
+               "dismissed first-run guide state round-trips");
+
+        expect(writeFile(version11Path,
+                         makeVersion11FixtureWithoutProjectMetadata(currentBytes)),
+               "write derived v1.1 fixture without project metadata");
+        auto version11Loaded = std::make_unique<AppState>();
+        expect(loadState(*version11Loaded, version11Path.string(), error),
+               "load format 1.1 fixture: " + error);
+        expect(version11Loaded->tracks[1].steps[6].advancedFm == trackPatch &&
+                   version11Loaded->controller == current.controller,
+               "format 1.1 advanced synthesis and controller data remain compatible");
+        expect(version11Loaded->patternMetadata ==
+                   std::array<PatternMetadata, kPatternCount> {} &&
+                   !version11Loaded->onboardingDismissed,
+               "format 1.1 receives neutral optional project metadata defaults");
 
         Bytes corrupt = readFile(currentPath);
         if (corrupt.size() > kLegacyHeaderSize + 32U) {
@@ -579,6 +695,135 @@ int main() {
                    untouched.tracks[0].steps[0].advancedFm == untouchedAdvanced &&
                    untouched.controller == untouchedController,
                "failed current load leaves destination unchanged");
+
+        const EnvironmentRestore restoreXdg("XDG_DATA_HOME");
+        const fs::path xdgRoot = temporary.path / "xdg-data";
+        expect(::setenv("XDG_DATA_HOME", xdgRoot.c_str(), 1) == 0,
+               "set isolated XDG data root");
+        const fs::path sanitizedProject =
+            projectPathForName("  Ambient../Drone tail  ");
+        expect(sanitizedProject.is_absolute() &&
+                   sanitizedProject.parent_path() ==
+                       xdgRoot / "fms-linux" / "projects" &&
+                   sanitizedProject.filename() == "Ambient-Drone-tail.fms",
+               "project names map to safe native XDG paths");
+        auto projectState = std::make_unique<AppState>(makeDefaultState());
+        projectState->bpm = 91;
+        expect(saveStateNew(*projectState, sanitizedProject.string(), error),
+               "create a new named project atomically: " + error);
+        const Bytes originalProjectBytes = readFile(sanitizedProject);
+        projectState->bpm = 244;
+        expect(!saveStateNew(*projectState, sanitizedProject.string(), error) &&
+                   error.find("preserved") != std::string::npos,
+               "Save As refuses to replace an existing project");
+        expect(loadState(*projectState, sanitizedProject.string(), error) &&
+                   projectState->bpm == 91 &&
+                   readFile(sanitizedProject) == originalProjectBytes,
+               "failed create-new save leaves the existing project byte-for-byte unchanged");
+        const fs::path nextProject = projectPathForName("Ambient../Drone tail");
+        expect(nextProject.filename() == "Ambient-Drone-tail-2.fms",
+               "a colliding project name receives a visible numeric suffix");
+
+        const fs::path defaultPath = defaultSavePath();
+        *projectState = makeDefaultState();
+        projectState->bpm = 133;
+        expect(saveStateNew(*projectState, defaultPath.string(), error),
+               "create isolated default session: " + error);
+        const auto recentTime = fs::file_time_type::clock::now();
+        std::error_code timeError;
+        fs::last_write_time(defaultPath, recentTime - std::chrono::hours(2), timeError);
+        expect(!timeError, "set default project timestamp");
+        fs::last_write_time(sanitizedProject, recentTime - std::chrono::hours(1), timeError);
+        expect(!timeError, "set named project timestamp");
+        const std::vector<std::string> recent = recentProjectPaths();
+        expect(recent.size() == 2U && recent.front() == sanitizedProject.string() &&
+                   recent.back() == defaultPath.string(),
+               "Recent projects scans managed native files in modification order");
+
+        const fs::path unreadableProject =
+            sanitizedProject.parent_path() / "broken-project.fms";
+        const Bytes unreadableBytes {'N', 'O', 'T', '-', 'F', 'M', 'S'};
+        expect(writeFile(unreadableProject, unreadableBytes),
+               "write an unreadable project fixture");
+        *projectState = makeDefaultState();
+        projectState->bpm = 188;
+        ProjectFileTarget protectedTarget {unreadableProject.string(), false, true};
+        ProjectSaveResult projectSaveResult = ProjectSaveResult::Saved;
+        expect(!saveProjectState(*projectState, protectedTarget, false,
+                                 projectSaveResult, error) &&
+                   readFile(unreadableProject) == unreadableBytes,
+               "unsafe active target is refused and preserved when recovery is disabled");
+        expect(saveProjectState(*projectState, protectedTarget, true,
+                                projectSaveResult, error) &&
+                   projectSaveResult == ProjectSaveResult::Recovered &&
+                   protectedTarget.path != unreadableProject.string() &&
+                   protectedTarget.readableOrMissing && protectedTarget.exists &&
+                   readFile(unreadableProject) == unreadableBytes,
+               "unsafe active target is redirected to a managed recovery project");
+        projectState->bpm = 30;
+        expect(loadState(*projectState, protectedTarget.path, error) &&
+                   projectState->bpm == 188,
+               "managed recovery project contains the complete current state");
+
+        projectState->bpm = 199;
+        projectState->lightTheme = true;
+        projectState->accent = 4;
+        projectState->controller.enabled = false;
+        projectState->onboardingDismissed = true;
+        projectState->tracks[0].steps[0].note = 71;
+        const std::uint64_t beforeNewRevision = projectState->editRevision;
+        const fs::path blockedXdgRoot = temporary.path / "blocked-xdg-root";
+        expect(writeFile(blockedXdgRoot, Bytes {'B', 'L', 'O', 'C', 'K'}),
+               "create a blocked XDG recovery root");
+        expect(::setenv("XDG_DATA_HOME", blockedXdgRoot.c_str(), 1) == 0,
+               "route recovery to an intentionally invalid root");
+        ProjectFileTarget failedNewTarget {unreadableProject.string(), false, true};
+        const ProjectFileTarget failedNewTargetBefore = failedNewTarget;
+        projectSaveResult = ProjectSaveResult::Saved;
+        expect(!prepareNewProject(*projectState, failedNewTarget, true,
+                                  projectSaveResult, error) &&
+                   failedNewTarget.path == failedNewTargetBefore.path &&
+                   failedNewTarget.readableOrMissing ==
+                       failedNewTargetBefore.readableOrMissing &&
+                   failedNewTarget.exists == failedNewTargetBefore.exists &&
+                   projectState->bpm == 199 && projectState->lightTheme &&
+                   projectState->tracks[0].steps[0].note == 71,
+               "failed New preservation leaves current project state and target intact");
+
+        expect(::setenv("XDG_DATA_HOME", xdgRoot.c_str(), 1) == 0,
+               "restore writable managed project root");
+        const fs::path oldProjectPath = projectPathForName("before-new");
+        ProjectFileTarget successfulNewTarget {oldProjectPath.string(), true, false};
+        projectSaveResult = ProjectSaveResult::Recovered;
+        expect(prepareNewProject(*projectState, successfulNewTarget, true,
+                                 projectSaveResult, error),
+               "New transaction preserves dirty current work before reset: " + error);
+        expect(projectSaveResult == ProjectSaveResult::Saved &&
+                   successfulNewTarget.readableOrMissing &&
+                   !successfulNewTarget.exists &&
+                   fs::path(successfulNewTarget.path).filename().string().starts_with("untitled") &&
+                   !fs::exists(successfulNewTarget.path),
+               "successful New assigns a unique unpublished managed target");
+        expect(projectState->bpm == 120 && projectState->tracks[0].steps[0].active &&
+                   projectState->lightTheme && projectState->accent == 4 &&
+                   !projectState->controller.enabled && projectState->onboardingDismissed &&
+                   projectState->editRevision == beforeNewRevision + 1U,
+               "successful New installs starter data while preserving user preferences");
+        expect(loadState(*version11Loaded, oldProjectPath.string(), error) &&
+                   version11Loaded->bpm == 199 &&
+                   version11Loaded->tracks[0].steps[0].note == 71,
+               "the pre-New dirty project was committed before starter data installation");
+
+        bool foundTemporarySave = false;
+        for (const fs::directory_entry& entry :
+             fs::directory_iterator(sanitizedProject.parent_path())) {
+            if (entry.path().filename().string().starts_with(".fms-save-")) {
+                foundTemporarySave = true;
+                break;
+            }
+        }
+        expect(!foundTemporarySave,
+               "successful and rejected atomic saves leave no temporary files behind");
 
         if (failures == 0) {
             std::cout << "FMS persistence compatibility tests passed.\n";

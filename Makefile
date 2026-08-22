@@ -49,8 +49,8 @@ $(PERSISTENCE_TEST_TARGET): tests/test_persistence.cpp src/model.cpp src/persist
 $(AUDIO_TEST_TARGET): tests/test_audio.cpp src/model.cpp src/audio.cpp src/model.hpp src/audio.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(LDFLAGS) tests/test_audio.cpp src/model.cpp src/audio.cpp -o $@ $(LDLIBS)
 
-$(UI_TEST_TARGET): tests/test_ui.cpp src/model.cpp src/audio.cpp src/ui.cpp src/model.hpp src/audio.hpp src/ui.hpp
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(LDFLAGS) tests/test_ui.cpp src/model.cpp src/audio.cpp src/ui.cpp -o $@ $(LDLIBS)
+$(UI_TEST_TARGET): tests/test_ui.cpp src/model.cpp src/audio.cpp src/ui.cpp src/persistence.cpp src/model.hpp src/audio.hpp src/persistence.hpp src/ui.hpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(LDFLAGS) tests/test_ui.cpp src/model.cpp src/audio.cpp src/ui.cpp src/persistence.cpp -o $@ $(LDLIBS)
 
 test: $(TEST_TARGET) $(PERSISTENCE_TEST_TARGET) $(AUDIO_TEST_TARGET) $(UI_TEST_TARGET) $(TARGET)
 	./$(TEST_TARGET)

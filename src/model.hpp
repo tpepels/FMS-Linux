@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -14,6 +15,7 @@ constexpr int kStepCount = 16;
 constexpr int kPatternCount = 128;
 constexpr int kPaletteSize = 14;
 constexpr int kPpqn = 24;
+constexpr std::size_t kPatternMetadataNameLength = 12;
 
 enum class Pan : std::uint8_t { Left, Center, Right };
 enum class Direction : std::uint8_t { Forward, PingPong, Reverse, Random };
@@ -291,6 +293,17 @@ struct StoredPattern {
     TrackData track {};
 };
 
+// A pattern column is one musical scene shared by the five per-track pattern
+// slots at the same index. Its optional label and restrained color make the
+// Data view easier to scan without changing any playback data.
+struct PatternMetadata {
+    std::array<char, kPatternMetadataNameLength + 1> name {};
+    // 0 uses the neutral/default treatment; 1..5 select an accent treatment.
+    std::uint8_t color = 0;
+
+    bool operator==(const PatternMetadata&) const = default;
+};
+
 struct BankSettings {
     std::array<char, 5> name {'B', 'A', 'N', 'K', '\0'};
     bool locked = false;
@@ -309,10 +322,12 @@ struct AppState {
     std::uint8_t accent = 0;
     std::array<TrackData, kTrackCount> tracks {};
     std::array<std::array<StoredPattern, kPatternCount>, kTrackCount> patterns {};
+    std::array<PatternMetadata, kPatternCount> patternMetadata {};
     std::array<BankSettings, 8> banks {};
     std::array<Step, kPaletteSize> fmPalette {};
     std::array<Step, kPaletteSize> noisePalette {};
     ControllerSettings controller {};
+    bool onboardingDismissed = false;
     std::uint64_t editRevision = 1;
 };
 
@@ -325,6 +340,11 @@ struct PerformanceState {
 
 struct SharedState {
     mutable std::mutex mutex;
+    // Raised by the UI while it is reconciling asynchronous transport
+    // receipts and recording one synchronous AppState mutation. Audio-thread
+    // transport commits acquire `mutex`, then consult this flag; while raised
+    // they remain armed and defer without mutating or settling.
+    std::atomic<bool> uiMutationInProgress {false};
     AppState app {};
 };
 

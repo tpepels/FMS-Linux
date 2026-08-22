@@ -48,6 +48,11 @@ int main() {
                state.controller.buttons[static_cast<std::size_t>(ControllerAction::Confirm)] !=
                    kControllerButtonUnbound,
            "controller defaults are device-independent and bound");
+    expect(std::string(state.patternMetadata[0].name.data()) == "STARTER" &&
+               state.patternMetadata[0].color == 1,
+           "starter pattern column has a discoverable name and color");
+    expect(!state.onboardingDismissed,
+           "fresh state opens the dismissible first-run guide");
 
     const PerformanceState snapshot = capturePerformance(state);
     state.bpm = 299;
@@ -70,6 +75,9 @@ int main() {
     state.tracks[0].steps[0].advancedFm.unisonVoices = 0;
     state.tracks[0].steps[0].advancedFm.modulation[0].depth = -128;
     state.controller.buttons[0] = 200;
+    state.patternMetadata[3].name.fill('A');
+    state.patternMetadata[3].name[1] = static_cast<char>(1);
+    state.patternMetadata[3].color = 255;
     sanitize(state);
     expect(state.bpm == 300, "tempo is sanitized");
     expect(state.scaleMask != 0, "empty scale is sanitized");
@@ -89,6 +97,10 @@ int main() {
            "advanced numeric values are sanitized");
     expect(state.controller.buttons[0] == kControllerButtonUnbound,
            "invalid controller buttons are sanitized to unbound");
+    expect(state.patternMetadata[3].name[1] == ' ' &&
+               state.patternMetadata[3].name[kPatternMetadataNameLength] == '\0' &&
+               state.patternMetadata[3].color == 0,
+           "pattern labels remain printable, terminated, and use a valid color");
 
     TrackData a;
     TrackData b;
@@ -117,6 +129,10 @@ int main() {
     state.tracks[1].steps[0].pan = static_cast<Pan>(255);
     state.patterns[2][77].occupied = true;
     state.patterns[2][77].track = state.tracks[2];
+    state.patternMetadata[77].name = {
+        'N', 'I', 'G', 'H', 'T', ' ', 'A', 'I', 'R', '\0'};
+    state.patternMetadata[77].color = 4;
+    state.onboardingDismissed = true;
     std::string error;
     expect(saveState(state, path.string(), error), "state save: " + error);
     AppState loaded;
@@ -128,6 +144,9 @@ int main() {
            "invalid in-memory enums are normalized before saving");
     expect(loaded.patterns[2][77].occupied && loaded.patterns[2][77].track.steps[5].note == 91,
            "pattern library round-trips");
+    expect(std::string(loaded.patternMetadata[77].name.data()) == "NIGHT AIR" &&
+               loaded.patternMetadata[77].color == 4 && loaded.onboardingDismissed,
+           "pattern metadata and first-run preference round-trip");
 
     if (std::filesystem::exists(path)) {
         std::fstream corrupt(path, std::ios::in | std::ios::out | std::ios::binary);

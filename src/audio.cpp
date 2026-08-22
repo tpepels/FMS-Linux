@@ -28,11 +28,22 @@ constexpr std::size_t kPreviewCapacity = 64;
 constexpr std::size_t kPatternCommandCapacity = 32;
 constexpr std::size_t kColumnCommandCapacity = 8;
 constexpr std::size_t kGlobalSettingsCommandCapacity = 16;
+constexpr std::size_t kScheduledTransportEventCapacity =
+    kColumnCommandCapacity + kGlobalSettingsCommandCapacity;
 constexpr double kGlobalBoundaryTicks = static_cast<double>(kStepCount) * kTicksPerStep;
+constexpr double kTickEpsilon = 1.0e-9;
 
 template <typename T>
 constexpr T clampValue(T value, T low, T high) noexcept {
     return value < low ? low : (value > high ? high : value);
+}
+
+bool scheduledValueSupersedes(std::uint64_t newerOrder, double newerTick,
+                              std::uint64_t olderOrder, double olderTick) noexcept {
+    // A later-submitted change replaces an older change at the same boundary,
+    // or an older future change when the new request is immediate. If the
+    // newer request targets a later boundary, retain both chronological events.
+    return newerOrder > olderOrder && newerTick <= olderTick + kTickEpsilon;
 }
 
 std::uint32_t xorshift32(std::uint32_t& state) noexcept {
@@ -1216,6 +1227,7 @@ struct ColumnCommand {
     std::uint64_t order = 0u;
     std::uint8_t trackMask = 0u;
     TrackCommandKind kind = TrackCommandKind::Cue;
+    bool applyImmediately = false;
     TimedGlobalSettings settings {};
     std::array<TrackData, kTrackCount> patterns {};
 };
@@ -1225,21 +1237,46 @@ struct ColumnCommandSlot {
     ColumnCommand command {};
 };
 
-struct ArmedColumn {
-    bool active = false;
-    std::uint64_t resetGeneration = 0u;
+struct ColumnReceipt {
     std::uint64_t token = 0u;
     std::uint64_t order = 0u;
     std::uint8_t trackMask = 0u;
-    TrackCommandKind kind = TrackCommandKind::Cue;
+    bool tempo = false;
+    bool scale = false;
+    bool settled = false;
+};
+
+struct GlobalSettingsReceipt {
+    std::uint64_t token = 0u;
+    std::uint64_t order = 0u;
+    bool tempo = false;
+    bool scale = false;
+    bool settled = false;
+};
+
+struct ArmedColumn {
+    bool active = false;
+    std::uint64_t resetGeneration = 0u;
+    std::uint8_t trackMask = 0u;
+    std::array<std::uint64_t, kTrackCount> trackOrders {};
+    std::array<TrackCommandKind, kTrackCount> trackKinds {};
     double targetTick = 0.0;
+    std::uint64_t tempoOrder = 0u;
+    std::uint64_t scaleOrder = 0u;
     TimedGlobalSettings settings {};
     std::array<TrackData, kTrackCount> patterns {};
+    std::array<ColumnReceipt, kColumnCommandCapacity> columnReceipts {};
+    std::size_t columnReceiptCount = 0u;
+    std::array<GlobalSettingsReceipt, kGlobalSettingsCommandCapacity>
+        globalSettingsReceipts {};
+    std::size_t globalSettingsReceiptCount = 0u;
 };
 
 struct GlobalSettingsCommand {
     std::uint64_t resetGeneration = 0u;
     std::uint64_t token = 0u;
+    std::uint64_t order = 0u;
+    bool applyImmediately = false;
     TimedGlobalSettings settings {};
 };
 
@@ -1248,12 +1285,17 @@ struct GlobalSettingsCommandSlot {
     GlobalSettingsCommand command {};
 };
 
-struct ArmedGlobalSettings {
-    bool active = false;
-    std::uint64_t resetGeneration = 0u;
-    std::uint64_t token = 0u;
-    double targetTick = 0.0;
-    TimedGlobalSettings settings {};
+struct SettlementSlot {
+    std::atomic<std::uint64_t> sequence {0u};
+    std::atomic<std::uint64_t> token {0u};
+    std::atomic<int> track {-1};
+    std::atomic<std::uint8_t> family {
+        static_cast<std::uint8_t>(TransportCommandFamily::Track)};
+    std::atomic<std::uint8_t> outcome {
+        static_cast<std::uint8_t>(TransportSettlementOutcome::Cancelled)};
+    std::atomic<std::uint8_t> appliedTrackMask {0u};
+    std::atomic<bool> appliedTempo {false};
+    std::atomic<bool> appliedScale {false};
 };
 
 template <typename Slot, std::size_t Capacity, typename Command>
@@ -1295,6 +1337,18 @@ bool dequeueBounded(std::array<Slot, Capacity>& slots, std::size_t& dequeue,
     return true;
 }
 
+template <typename Slot, std::size_t Capacity, typename Command>
+bool peekBounded(const std::array<Slot, Capacity>& slots, std::size_t dequeue,
+                 Command& command) noexcept {
+    const Slot& slot = slots[dequeue % slots.size()];
+    const std::size_t sequence = slot.sequence.load(std::memory_order_acquire);
+    const std::intptr_t difference = static_cast<std::intptr_t>(sequence) -
+                                     static_cast<std::intptr_t>(dequeue + 1u);
+    if (difference != 0) return false;
+    command = slot.command;
+    return true;
+}
+
 struct ModValues {
     int level = 0;
     int pan = 0;
@@ -1330,6 +1384,21 @@ struct AudioEngine::Impl {
     std::atomic<std::uint64_t> submittedGlobalSettingsGeneration {0u};
     std::atomic<std::uint64_t> publishedGlobalSettingsGeneration {0u};
     std::atomic<std::uint64_t> nextGlobalSettingsToken {0u};
+    std::array<std::atomic<std::uint64_t>, kTrackCount>
+        settledPatternGenerations;
+    std::atomic<std::uint64_t> settledColumnGeneration {0u};
+    std::atomic<std::uint64_t> settledGlobalSettingsGeneration {0u};
+    std::array<SettlementSlot, kTransportSettlementCapacity> settlementSlots {};
+    std::atomic<std::uint64_t> latestSettlementSequence {0u};
+    std::uint64_t nextSettlementSequence = 0u;
+    std::array<std::array<std::atomic<std::uint64_t>,
+                          kTransportSettlementCapacity>,
+               kTrackCount>
+        requestedPatternCancellations {};
+    std::array<std::atomic<std::uint64_t>, kTransportSettlementCapacity>
+        requestedColumnCancellations {};
+    std::array<std::atomic<std::uint64_t>, kTransportSettlementCapacity>
+        requestedGlobalSettingsCancellations {};
     std::atomic<std::uint64_t> nextReplacementOrder {0u};
     std::atomic<float> publishedPeakLeft {0.0f};
     std::atomic<float> publishedPeakRight {0.0f};
@@ -1354,12 +1423,11 @@ struct AudioEngine::Impl {
     std::array<ColumnCommandSlot, kColumnCommandCapacity> columnCommandSlots {};
     std::atomic<std::size_t> columnCommandEnqueue {0u};
     std::size_t columnCommandDequeue = 0u;
-    ArmedColumn armedColumn {};
+    std::array<ArmedColumn, kScheduledTransportEventCapacity> armedColumns {};
     std::array<GlobalSettingsCommandSlot, kGlobalSettingsCommandCapacity>
         globalSettingsCommandSlots {};
     std::atomic<std::size_t> globalSettingsCommandEnqueue {0u};
     std::size_t globalSettingsCommandDequeue = 0u;
-    ArmedGlobalSettings armedGlobalSettings {};
 
     Impl() {
         for (int track = 0; track < kTrackCount; ++track) {
@@ -1373,11 +1441,14 @@ struct AudioEngine::Impl {
                 0u, std::memory_order_relaxed);
             nextPatternTokens[static_cast<std::size_t>(track)].store(
                 0u, std::memory_order_relaxed);
+            settledPatternGenerations[static_cast<std::size_t>(track)].store(
+                0u, std::memory_order_relaxed);
         }
         initializePreviewQueue();
         initializePatternCommandQueue();
         initializeColumnCommandQueue();
         initializeGlobalSettingsCommandQueue();
+        initializeSettlementState();
     }
 
     void initializePreviewQueue() noexcept {
@@ -1444,7 +1515,7 @@ struct AudioEngine::Impl {
         for (std::size_t i = 0u; i < columnCommandSlots.size(); ++i) {
             columnCommandSlots[i].sequence.store(i, std::memory_order_relaxed);
         }
-        armedColumn = ArmedColumn {};
+        for (ArmedColumn& event : armedColumns) event = ArmedColumn {};
     }
 
     void initializeGlobalSettingsCommandQueue() noexcept {
@@ -1453,7 +1524,140 @@ struct AudioEngine::Impl {
         for (std::size_t i = 0u; i < globalSettingsCommandSlots.size(); ++i) {
             globalSettingsCommandSlots[i].sequence.store(i, std::memory_order_relaxed);
         }
-        armedGlobalSettings = ArmedGlobalSettings {};
+    }
+
+    void initializeSettlementState() noexcept {
+        nextSettlementSequence = 0u;
+        latestSettlementSequence.store(0u, std::memory_order_relaxed);
+        settledColumnGeneration.store(0u, std::memory_order_relaxed);
+        settledGlobalSettingsGeneration.store(0u, std::memory_order_relaxed);
+        for (std::atomic<std::uint64_t>& generation : settledPatternGenerations) {
+            generation.store(0u, std::memory_order_relaxed);
+        }
+        for (SettlementSlot& slot : settlementSlots) {
+            slot.sequence.store(0u, std::memory_order_relaxed);
+            slot.token.store(0u, std::memory_order_relaxed);
+            slot.track.store(-1, std::memory_order_relaxed);
+            slot.family.store(
+                static_cast<std::uint8_t>(TransportCommandFamily::Track),
+                std::memory_order_relaxed);
+            slot.outcome.store(
+                static_cast<std::uint8_t>(TransportSettlementOutcome::Cancelled),
+                std::memory_order_relaxed);
+            slot.appliedTrackMask.store(0u, std::memory_order_relaxed);
+            slot.appliedTempo.store(false, std::memory_order_relaxed);
+            slot.appliedScale.store(false, std::memory_order_relaxed);
+        }
+        for (auto& trackCancellations : requestedPatternCancellations) {
+            for (std::atomic<std::uint64_t>& cancellation : trackCancellations) {
+                cancellation.store(0u, std::memory_order_relaxed);
+            }
+        }
+        for (std::atomic<std::uint64_t>& cancellation :
+             requestedColumnCancellations) {
+            cancellation.store(0u, std::memory_order_relaxed);
+        }
+        for (std::atomic<std::uint64_t>& cancellation :
+             requestedGlobalSettingsCancellations) {
+            cancellation.store(0u, std::memory_order_relaxed);
+        }
+    }
+
+    void publishSettlement(TransportCommandFamily family,
+                           TransportSettlementOutcome outcome,
+                           std::uint64_t token, int track = -1,
+                           std::uint8_t appliedTrackMask = 0u,
+                           bool appliedTempo = false,
+                           bool appliedScale = false) noexcept {
+        if (token == 0u) return;
+        const std::uint64_t sequence = ++nextSettlementSequence;
+        SettlementSlot& slot = settlementSlots[static_cast<std::size_t>(
+            (sequence - 1u) % settlementSlots.size())];
+        slot.sequence.store(0u, std::memory_order_release);
+        slot.token.store(token, std::memory_order_relaxed);
+        slot.track.store(track, std::memory_order_relaxed);
+        slot.family.store(static_cast<std::uint8_t>(family),
+                          std::memory_order_relaxed);
+        slot.outcome.store(static_cast<std::uint8_t>(outcome),
+                           std::memory_order_relaxed);
+        slot.appliedTrackMask.store(appliedTrackMask, std::memory_order_relaxed);
+        slot.appliedTempo.store(appliedTempo, std::memory_order_relaxed);
+        slot.appliedScale.store(appliedScale, std::memory_order_relaxed);
+        slot.sequence.store(sequence, std::memory_order_release);
+        latestSettlementSequence.store(sequence, std::memory_order_release);
+        switch (family) {
+        case TransportCommandFamily::Track:
+            if (track >= 0 && track < kTrackCount) {
+                publishGeneration(
+                    settledPatternGenerations[static_cast<std::size_t>(track)], token);
+            }
+            break;
+        case TransportCommandFamily::Column:
+            publishGeneration(settledColumnGeneration, token);
+            break;
+        case TransportCommandFamily::GlobalSettings:
+            publishGeneration(settledGlobalSettingsGeneration, token);
+            break;
+        }
+    }
+
+    bool cancellationRequested(TransportCommandFamily family, std::uint64_t token,
+                               int track = -1) const noexcept {
+        if (token == 0u) return false;
+        const std::size_t index = static_cast<std::size_t>(
+            (token - 1u) % kTransportSettlementCapacity);
+        switch (family) {
+        case TransportCommandFamily::Track:
+            return track >= 0 && track < kTrackCount &&
+                requestedPatternCancellations[static_cast<std::size_t>(track)][index]
+                        .load(std::memory_order_acquire) == token;
+        case TransportCommandFamily::Column:
+            return requestedColumnCancellations[index].load(
+                       std::memory_order_acquire) == token;
+        case TransportCommandFamily::GlobalSettings:
+            return requestedGlobalSettingsCancellations[index].load(
+                       std::memory_order_acquire) == token;
+        }
+        return false;
+    }
+
+    void requestCancellation(TransportCommandFamily family, std::uint64_t token,
+                             int track = -1) noexcept {
+        const std::size_t index = static_cast<std::size_t>(
+            (token - 1u) % kTransportSettlementCapacity);
+        switch (family) {
+        case TransportCommandFamily::Track:
+            requestedPatternCancellations[static_cast<std::size_t>(track)][index]
+                .store(token, std::memory_order_release);
+            break;
+        case TransportCommandFamily::Column:
+            requestedColumnCancellations[index].store(token,
+                                                      std::memory_order_release);
+            break;
+        case TransportCommandFamily::GlobalSettings:
+            requestedGlobalSettingsCancellations[index].store(
+                token, std::memory_order_release);
+            break;
+        }
+    }
+
+    bool settlementPublished(TransportCommandFamily family, std::uint64_t token,
+                             int track = -1) const noexcept {
+        for (const SettlementSlot& slot : settlementSlots) {
+            const std::uint64_t before = slot.sequence.load(std::memory_order_acquire);
+            if (before == 0u) continue;
+            const std::uint64_t settledToken =
+                slot.token.load(std::memory_order_relaxed);
+            const int settledTrack = slot.track.load(std::memory_order_relaxed);
+            const auto settledFamily = static_cast<TransportCommandFamily>(
+                slot.family.load(std::memory_order_relaxed));
+            const std::uint64_t after = slot.sequence.load(std::memory_order_acquire);
+            if (before == after && settledToken == token && settledFamily == family &&
+                (family != TransportCommandFamily::Track || settledTrack == track)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     bool enqueuePatternCommand(const PatternCommand& command) noexcept {
@@ -1494,25 +1698,80 @@ struct AudioEngine::Impl {
         return true;
     }
 
+    bool peekPatternCommand(PatternCommand& command) const noexcept {
+        const PatternCommandSlot& slot =
+            patternCommandSlots[patternCommandDequeue % patternCommandSlots.size()];
+        const std::size_t sequence = slot.sequence.load(std::memory_order_acquire);
+        const std::intptr_t difference = static_cast<std::intptr_t>(sequence) -
+                                         static_cast<std::intptr_t>(
+                                             patternCommandDequeue + 1u);
+        if (difference != 0) return false;
+        command = slot.command;
+        return true;
+    }
+
     void drainPatternCommands() noexcept {
         PatternCommand command;
-        while (dequeuePatternCommand(command)) {
-            if (command.track < 0 || command.track >= kTrackCount ||
-                command.resetGeneration < observedResetGeneration) {
+        while (peekPatternCommand(command)) {
+            if (command.resetGeneration > observedResetGeneration) return;
+            if (!dequeuePatternCommand(command)) return;
+            if (command.track < 0 || command.track >= kTrackCount) {
+                continue;
+            }
+            if (command.resetGeneration < observedResetGeneration) {
+                publishSettlement(TransportCommandFamily::Track,
+                                  TransportSettlementOutcome::Cancelled,
+                                  command.token, command.track);
+                continue;
+            }
+            const std::size_t trackIndex = static_cast<std::size_t>(command.track);
+            const std::uint64_t settled =
+                settledPatternGenerations[trackIndex].load(std::memory_order_relaxed);
+            if (command.token <= settled) continue;
+            const std::uint64_t applied =
+                publishedPatternGenerations[trackIndex].load(
+                    std::memory_order_relaxed);
+            if (command.token <= applied) continue;
+            if (cancellationRequested(TransportCommandFamily::Track,
+                                      command.token, command.track)) {
+                publishSettlement(TransportCommandFamily::Track,
+                                  TransportSettlementOutcome::Cancelled,
+                                  command.token, command.track);
                 continue;
             }
             ArmedPattern& armed = armedPatterns[static_cast<std::size_t>(command.track)];
-            if (armedColumn.active &&
-                (armedColumn.trackMask &
-                 static_cast<std::uint8_t>(1u << command.track)) != 0u &&
-                armedColumn.order > command.order) {
+            const std::uint8_t trackBit = static_cast<std::uint8_t>(1u << command.track);
+            bool supersededByColumn = false;
+            for (ArmedColumn& event : armedColumns) {
+                if (!event.active || event.resetGeneration != command.resetGeneration ||
+                    (event.trackMask & trackBit) == 0u) {
+                    continue;
+                }
+                const std::size_t index = static_cast<std::size_t>(command.track);
+                if (event.trackOrders[index] > command.order) {
+                    supersededByColumn = true;
+                } else if (command.order > event.trackOrders[index]) {
+                    event.trackMask = static_cast<std::uint8_t>(
+                        event.trackMask & static_cast<std::uint8_t>(~trackBit));
+                    event.trackOrders[index] = 0u;
+                }
+            }
+            if (supersededByColumn) {
+                publishSettlement(TransportCommandFamily::Track,
+                                  TransportSettlementOutcome::Cancelled,
+                                  command.token, command.track);
                 continue;
             }
-            const std::uint64_t applied =
-                publishedPatternGenerations[static_cast<std::size_t>(command.track)].load(
-                    std::memory_order_relaxed);
-            if (command.token <= applied || (armed.active && command.token <= armed.token)) {
+            if (armed.active && command.token <= armed.token) {
+                publishSettlement(TransportCommandFamily::Track,
+                                  TransportSettlementOutcome::Cancelled,
+                                  command.token, command.track);
                 continue;
+            }
+            if (armed.active) {
+                publishSettlement(TransportCommandFamily::Track,
+                                  TransportSettlementOutcome::Cancelled,
+                                  armed.token, command.track);
             }
             armed.pattern = command.pattern;
             armed.resetGeneration = command.resetGeneration;
@@ -1524,10 +1783,284 @@ struct AudioEngine::Impl {
     }
 
     double nextGlobalBoundary() const noexcept {
-        if (!shouldRun.load(std::memory_order_acquire)) return transportTick;
         const double currentBar = std::floor(
             std::max(0.0, transportTick) / kGlobalBoundaryTicks);
         return (currentBar + 1.0) * kGlobalBoundaryTicks;
+    }
+
+    ArmedColumn* findTransportEvent(std::uint64_t generation,
+                                    double targetTick) noexcept {
+        for (ArmedColumn& event : armedColumns) {
+            if (event.active && event.resetGeneration == generation &&
+                std::fabs(event.targetTick - targetTick) <= kTickEpsilon) {
+                return &event;
+            }
+        }
+        return nullptr;
+    }
+
+    ArmedColumn* reserveTransportEvent(std::uint64_t generation,
+                                       double targetTick) noexcept {
+        if (ArmedColumn* event = findTransportEvent(generation, targetTick)) {
+            return event;
+        }
+        for (ArmedColumn& event : armedColumns) {
+            if (event.active) continue;
+            event = ArmedColumn {};
+            event.active = true;
+            event.resetGeneration = generation;
+            event.targetTick = targetTick;
+            return &event;
+        }
+        return nullptr;
+    }
+
+    void scheduleColumnTrack(ArmedColumn& destination, const ColumnCommand& command,
+                             int track) noexcept {
+        const std::size_t index = static_cast<std::size_t>(track);
+        const std::uint8_t trackBit = static_cast<std::uint8_t>(1u << track);
+        ArmedPattern& trackCommand = armedPatterns[index];
+        if (trackCommand.active && trackCommand.order > command.order) return;
+        if (trackCommand.active && trackCommand.order < command.order) {
+            publishSettlement(TransportCommandFamily::Track,
+                              TransportSettlementOutcome::Cancelled,
+                              trackCommand.token, track);
+            trackCommand = ArmedPattern {};
+        }
+
+        bool superseded = false;
+        for (const ArmedColumn& event : armedColumns) {
+            if (!event.active || event.resetGeneration != command.resetGeneration ||
+                (event.trackMask & trackBit) == 0u) {
+                continue;
+            }
+            if (scheduledValueSupersedes(event.trackOrders[index], event.targetTick,
+                                         command.order, destination.targetTick)) {
+                superseded = true;
+                break;
+            }
+        }
+        if (superseded) return;
+
+        for (ArmedColumn& event : armedColumns) {
+            if (!event.active || event.resetGeneration != command.resetGeneration ||
+                (event.trackMask & trackBit) == 0u) {
+                continue;
+            }
+            if (scheduledValueSupersedes(command.order, destination.targetTick,
+                                         event.trackOrders[index], event.targetTick)) {
+                event.trackMask = static_cast<std::uint8_t>(
+                    event.trackMask & static_cast<std::uint8_t>(~trackBit));
+                event.trackOrders[index] = 0u;
+            }
+        }
+        destination.trackMask = static_cast<std::uint8_t>(
+            destination.trackMask | trackBit);
+        destination.trackOrders[index] = command.order;
+        destination.trackKinds[index] = command.kind;
+        destination.patterns[index] = command.patterns[index];
+        if (command.kind == TrackCommandKind::Cue &&
+            command.resetGeneration == observedResetGeneration) {
+            prunePendingFromBoundary(track, destination.targetTick);
+        }
+    }
+
+    void scheduleTempo(ArmedColumn& destination, std::uint64_t generation,
+                       std::uint64_t order, std::uint16_t bpm) noexcept {
+        for (const ArmedColumn& event : armedColumns) {
+            if (!event.active || event.resetGeneration != generation ||
+                !event.settings.applyTempo) {
+                continue;
+            }
+            if (scheduledValueSupersedes(event.tempoOrder, event.targetTick, order,
+                                         destination.targetTick)) {
+                return;
+            }
+        }
+        for (ArmedColumn& event : armedColumns) {
+            if (!event.active || event.resetGeneration != generation ||
+                !event.settings.applyTempo) {
+                continue;
+            }
+            if (scheduledValueSupersedes(order, destination.targetTick,
+                                         event.tempoOrder, event.targetTick)) {
+                event.settings.applyTempo = false;
+                event.tempoOrder = 0u;
+            }
+        }
+        destination.settings.applyTempo = true;
+        destination.settings.bpm = bpm;
+        destination.tempoOrder = order;
+    }
+
+    void scheduleScale(ArmedColumn& destination, std::uint64_t generation,
+                       std::uint64_t order, std::uint8_t root,
+                       std::uint16_t mask) noexcept {
+        for (const ArmedColumn& event : armedColumns) {
+            if (!event.active || event.resetGeneration != generation ||
+                !event.settings.applyScale) {
+                continue;
+            }
+            if (scheduledValueSupersedes(event.scaleOrder, event.targetTick, order,
+                                         destination.targetTick)) {
+                return;
+            }
+        }
+        for (ArmedColumn& event : armedColumns) {
+            if (!event.active || event.resetGeneration != generation ||
+                !event.settings.applyScale) {
+                continue;
+            }
+            if (scheduledValueSupersedes(order, destination.targetTick,
+                                         event.scaleOrder, event.targetTick)) {
+                event.settings.applyScale = false;
+                event.scaleOrder = 0u;
+            }
+        }
+        destination.settings.applyScale = true;
+        destination.settings.scaleRoot = root;
+        destination.settings.scaleMask = mask;
+        destination.scaleOrder = order;
+    }
+
+    static std::uint8_t receiptTrackMask(const ArmedColumn& event,
+                                         const ColumnReceipt& receipt) noexcept {
+        std::uint8_t result = 0u;
+        for (int track = 0; track < kTrackCount; ++track) {
+            const std::size_t index = static_cast<std::size_t>(track);
+            const std::uint8_t trackBit = static_cast<std::uint8_t>(1u << track);
+            if ((receipt.trackMask & trackBit) != 0u &&
+                (event.trackMask & trackBit) != 0u &&
+                event.trackOrders[index] == receipt.order) {
+                result = static_cast<std::uint8_t>(result | trackBit);
+            }
+        }
+        return result;
+    }
+
+    static bool receiptOwnsTempo(const ArmedColumn& event,
+                                 std::uint64_t order, bool requested) noexcept {
+        return requested && event.settings.applyTempo && event.tempoOrder == order;
+    }
+
+    static bool receiptOwnsScale(const ArmedColumn& event,
+                                 std::uint64_t order, bool requested) noexcept {
+        return requested && event.settings.applyScale && event.scaleOrder == order;
+    }
+
+    void settleSupersededTransportReceipts() noexcept {
+        for (ArmedColumn& event : armedColumns) {
+            if (!event.active) continue;
+            for (std::size_t index = 0u; index < event.columnReceiptCount; ++index) {
+                ColumnReceipt& receipt = event.columnReceipts[index];
+                if (receipt.settled) continue;
+                const bool ownsComponent = receiptTrackMask(event, receipt) != 0u ||
+                    receiptOwnsTempo(event, receipt.order, receipt.tempo) ||
+                    receiptOwnsScale(event, receipt.order, receipt.scale);
+                if (ownsComponent) continue;
+                receipt.settled = true;
+                publishSettlement(TransportCommandFamily::Column,
+                                  TransportSettlementOutcome::Cancelled,
+                                  receipt.token);
+            }
+            for (std::size_t index = 0u;
+                 index < event.globalSettingsReceiptCount; ++index) {
+                GlobalSettingsReceipt& receipt = event.globalSettingsReceipts[index];
+                if (receipt.settled) continue;
+                const bool ownsComponent =
+                    receiptOwnsTempo(event, receipt.order, receipt.tempo) ||
+                    receiptOwnsScale(event, receipt.order, receipt.scale);
+                if (ownsComponent) continue;
+                receipt.settled = true;
+                publishSettlement(TransportCommandFamily::GlobalSettings,
+                                  TransportSettlementOutcome::Cancelled,
+                                  receipt.token);
+            }
+        }
+    }
+
+    void applyRequestedCancellations() noexcept {
+        for (int track = 0; track < kTrackCount; ++track) {
+            ArmedPattern& pattern = armedPatterns[static_cast<std::size_t>(track)];
+            if (!pattern.active ||
+                !cancellationRequested(TransportCommandFamily::Track,
+                                       pattern.token, track)) {
+                continue;
+            }
+            publishSettlement(TransportCommandFamily::Track,
+                              TransportSettlementOutcome::Cancelled,
+                              pattern.token, track);
+            pattern = ArmedPattern {};
+        }
+        for (ArmedColumn& event : armedColumns) {
+            if (!event.active) continue;
+            for (std::size_t index = 0u; index < event.columnReceiptCount; ++index) {
+                ColumnReceipt& receipt = event.columnReceipts[index];
+                if (receipt.settled ||
+                    !cancellationRequested(TransportCommandFamily::Column,
+                                           receipt.token)) {
+                    continue;
+                }
+                for (int track = 0; track < kTrackCount; ++track) {
+                    const std::size_t trackIndex = static_cast<std::size_t>(track);
+                    const std::uint8_t trackBit =
+                        static_cast<std::uint8_t>(1u << track);
+                    if ((event.trackMask & trackBit) != 0u &&
+                        event.trackOrders[trackIndex] == receipt.order) {
+                        event.trackMask = static_cast<std::uint8_t>(
+                            event.trackMask & static_cast<std::uint8_t>(~trackBit));
+                        event.trackOrders[trackIndex] = 0u;
+                    }
+                }
+                if (event.settings.applyTempo && event.tempoOrder == receipt.order) {
+                    event.settings.applyTempo = false;
+                    event.tempoOrder = 0u;
+                }
+                if (event.settings.applyScale && event.scaleOrder == receipt.order) {
+                    event.settings.applyScale = false;
+                    event.scaleOrder = 0u;
+                }
+                receipt.settled = true;
+                publishSettlement(TransportCommandFamily::Column,
+                                  TransportSettlementOutcome::Cancelled,
+                                  receipt.token);
+            }
+            for (std::size_t index = 0u;
+                 index < event.globalSettingsReceiptCount; ++index) {
+                GlobalSettingsReceipt& receipt = event.globalSettingsReceipts[index];
+                if (receipt.settled ||
+                    !cancellationRequested(TransportCommandFamily::GlobalSettings,
+                                           receipt.token)) {
+                    continue;
+                }
+                if (event.settings.applyTempo && event.tempoOrder == receipt.order) {
+                    event.settings.applyTempo = false;
+                    event.tempoOrder = 0u;
+                }
+                if (event.settings.applyScale && event.scaleOrder == receipt.order) {
+                    event.settings.applyScale = false;
+                    event.scaleOrder = 0u;
+                }
+                receipt.settled = true;
+                publishSettlement(TransportCommandFamily::GlobalSettings,
+                                  TransportSettlementOutcome::Cancelled,
+                                  receipt.token);
+            }
+        }
+        settleSupersededTransportReceipts();
+        for (ArmedColumn& event : armedColumns) {
+            if (!event.active) continue;
+            bool pendingReceipt = false;
+            for (std::size_t index = 0u; index < event.columnReceiptCount; ++index) {
+                pendingReceipt = pendingReceipt || !event.columnReceipts[index].settled;
+            }
+            for (std::size_t index = 0u;
+                 index < event.globalSettingsReceiptCount; ++index) {
+                pendingReceipt = pendingReceipt ||
+                    !event.globalSettingsReceipts[index].settled;
+            }
+            if (!pendingReceipt) event = ArmedColumn {};
+        }
     }
 
     void prunePendingFromBoundary(int track, double boundary) noexcept {
@@ -1544,87 +2077,176 @@ struct AudioEngine::Impl {
 
     void drainColumnCommands() noexcept {
         ColumnCommand command;
-        while (dequeueBounded(columnCommandSlots, columnCommandDequeue, command)) {
+        while (peekBounded(columnCommandSlots, columnCommandDequeue, command)) {
+            if (command.resetGeneration > observedResetGeneration) return;
             if (command.resetGeneration < observedResetGeneration || command.trackMask == 0u) {
+                (void)dequeueBounded(columnCommandSlots, columnCommandDequeue, command);
+                publishSettlement(TransportCommandFamily::Column,
+                                  TransportSettlementOutcome::Cancelled,
+                                  command.token);
+                continue;
+            }
+            const std::uint64_t settled =
+                settledColumnGeneration.load(std::memory_order_relaxed);
+            if (command.token <= settled) {
+                (void)dequeueBounded(columnCommandSlots, columnCommandDequeue, command);
                 continue;
             }
             const std::uint64_t applied =
                 publishedColumnGeneration.load(std::memory_order_relaxed);
-            if (command.token <= applied ||
-                (armedColumn.active && command.token <= armedColumn.token)) {
+            if (command.token <= applied) {
+                (void)dequeueBounded(columnCommandSlots, columnCommandDequeue, command);
                 continue;
             }
-            armedColumn.active = true;
-            armedColumn.resetGeneration = command.resetGeneration;
-            armedColumn.token = command.token;
-            armedColumn.order = command.order;
-            armedColumn.trackMask = static_cast<std::uint8_t>(
-                command.trackMask & static_cast<std::uint8_t>((1u << kTrackCount) - 1u));
-            armedColumn.kind = command.kind;
-            armedColumn.targetTick = command.kind == TrackCommandKind::Cue
-                                         ? nextGlobalBoundary()
-                                         : transportTick;
-            armedColumn.settings = command.settings;
-            armedColumn.patterns = command.patterns;
-            for (int track = 0; track < kTrackCount; ++track) {
-                if ((armedColumn.trackMask & static_cast<std::uint8_t>(1u << track)) == 0u)
-                    continue;
-                ArmedPattern& trackCommand =
-                    armedPatterns[static_cast<std::size_t>(track)];
-                if (trackCommand.active && trackCommand.order < armedColumn.order) {
-                    trackCommand = ArmedPattern {};
-                }
+            if (cancellationRequested(TransportCommandFamily::Column,
+                                      command.token)) {
+                (void)dequeueBounded(columnCommandSlots, columnCommandDequeue, command);
+                publishSettlement(TransportCommandFamily::Column,
+                                  TransportSettlementOutcome::Cancelled,
+                                  command.token);
+                continue;
             }
-            if (armedColumn.kind == TrackCommandKind::Cue &&
-                armedColumn.resetGeneration == observedResetGeneration) {
-                for (int track = 0; track < kTrackCount; ++track) {
-                    if ((armedColumn.trackMask & static_cast<std::uint8_t>(1u << track)) == 0u)
-                        continue;
-                    prunePendingFromBoundary(track, armedColumn.targetTick);
-                }
+            const double targetTick = command.applyImmediately
+                                          ? transportTick
+                                          : nextGlobalBoundary();
+            ArmedColumn* const destination =
+                reserveTransportEvent(command.resetGeneration, targetTick);
+            if (destination == nullptr) return;
+            if (destination->columnReceiptCount >=
+                destination->columnReceipts.size()) {
+                return;
+            }
+            if (!dequeueBounded(columnCommandSlots, columnCommandDequeue, command)) return;
+            destination->columnReceipts[destination->columnReceiptCount++] = ColumnReceipt {
+                command.token,
+                command.order,
+                static_cast<std::uint8_t>(
+                    command.trackMask &
+                    static_cast<std::uint8_t>((1u << kTrackCount) - 1u)),
+                command.settings.applyTempo,
+                command.settings.applyScale,
+            };
+
+            const std::uint8_t commandMask = static_cast<std::uint8_t>(
+                command.trackMask & static_cast<std::uint8_t>((1u << kTrackCount) - 1u));
+            for (int track = 0; track < kTrackCount; ++track) {
+                const std::uint8_t trackBit = static_cast<std::uint8_t>(1u << track);
+                if ((commandMask & trackBit) == 0u) continue;
+                scheduleColumnTrack(*destination, command, track);
+            }
+
+            if (command.settings.applyTempo) {
+                scheduleTempo(*destination, command.resetGeneration, command.order,
+                              command.settings.bpm);
+            }
+            if (command.settings.applyScale) {
+                scheduleScale(*destination, command.resetGeneration, command.order,
+                              command.settings.scaleRoot,
+                              command.settings.scaleMask);
             }
         }
     }
 
     void drainGlobalSettingsCommands() noexcept {
         GlobalSettingsCommand command;
-        while (dequeueBounded(globalSettingsCommandSlots, globalSettingsCommandDequeue,
-                              command)) {
-            if (command.resetGeneration < observedResetGeneration) continue;
-            const std::uint64_t applied =
-                publishedGlobalSettingsGeneration.load(std::memory_order_relaxed);
-            if (command.token <= applied ||
-                (armedGlobalSettings.active && command.token <= armedGlobalSettings.token)) {
+        while (peekBounded(globalSettingsCommandSlots, globalSettingsCommandDequeue,
+                           command)) {
+            if (command.resetGeneration > observedResetGeneration) return;
+            if (command.resetGeneration < observedResetGeneration) {
+                (void)dequeueBounded(globalSettingsCommandSlots,
+                                     globalSettingsCommandDequeue, command);
+                publishSettlement(TransportCommandFamily::GlobalSettings,
+                                  TransportSettlementOutcome::Cancelled,
+                                  command.token);
                 continue;
             }
-            armedGlobalSettings.active = true;
-            armedGlobalSettings.resetGeneration = command.resetGeneration;
-            armedGlobalSettings.token = command.token;
-            armedGlobalSettings.targetTick =
-                armedColumn.active &&
-                        armedColumn.resetGeneration == command.resetGeneration &&
-                        armedColumn.kind == TrackCommandKind::Cue
-                    ? armedColumn.targetTick
-                    : nextGlobalBoundary();
-            armedGlobalSettings.settings = command.settings;
+            const std::uint64_t settled =
+                settledGlobalSettingsGeneration.load(std::memory_order_relaxed);
+            if (command.token <= settled) {
+                (void)dequeueBounded(globalSettingsCommandSlots,
+                                     globalSettingsCommandDequeue, command);
+                continue;
+            }
+            const std::uint64_t applied =
+                publishedGlobalSettingsGeneration.load(std::memory_order_relaxed);
+            if (command.token <= applied) {
+                (void)dequeueBounded(globalSettingsCommandSlots,
+                                     globalSettingsCommandDequeue, command);
+                continue;
+            }
+            if (cancellationRequested(TransportCommandFamily::GlobalSettings,
+                                      command.token)) {
+                (void)dequeueBounded(globalSettingsCommandSlots,
+                                     globalSettingsCommandDequeue, command);
+                publishSettlement(TransportCommandFamily::GlobalSettings,
+                                  TransportSettlementOutcome::Cancelled,
+                                  command.token);
+                continue;
+            }
+            const double targetTick = command.applyImmediately
+                                          ? transportTick
+                                          : nextGlobalBoundary();
+            ArmedColumn* const destination =
+                reserveTransportEvent(command.resetGeneration, targetTick);
+            if (destination == nullptr) return;
+            if (destination->globalSettingsReceiptCount >=
+                destination->globalSettingsReceipts.size()) {
+                return;
+            }
+            if (!dequeueBounded(globalSettingsCommandSlots,
+                                globalSettingsCommandDequeue, command)) {
+                return;
+            }
+            destination->globalSettingsReceipts[
+                destination->globalSettingsReceiptCount++] = GlobalSettingsReceipt {
+                command.token,
+                command.order,
+                command.settings.applyTempo,
+                command.settings.applyScale,
+            };
+            if (command.settings.applyTempo) {
+                scheduleTempo(*destination, command.resetGeneration, command.order,
+                              command.settings.bpm);
+            }
+            if (command.settings.applyScale) {
+                scheduleScale(*destination, command.resetGeneration, command.order,
+                              command.settings.scaleRoot,
+                              command.settings.scaleMask);
+            }
         }
+    }
+
+    void cancelTransportEvent(ArmedColumn& event) noexcept {
+        for (std::size_t index = 0u; index < event.columnReceiptCount; ++index) {
+            if (event.columnReceipts[index].settled) continue;
+            publishSettlement(TransportCommandFamily::Column,
+                              TransportSettlementOutcome::Cancelled,
+                              event.columnReceipts[index].token);
+        }
+        for (std::size_t index = 0u;
+             index < event.globalSettingsReceiptCount; ++index) {
+            if (event.globalSettingsReceipts[index].settled) continue;
+            publishSettlement(TransportCommandFamily::GlobalSettings,
+                              TransportSettlementOutcome::Cancelled,
+                              event.globalSettingsReceipts[index].token);
+        }
+        event = ArmedColumn {};
     }
 
     void discardStaleArmedPatterns() noexcept {
         for (ArmedPattern& pattern : armedPatterns) {
             if (pattern.active && pattern.resetGeneration == observedResetGeneration) continue;
-            pattern.active = false;
-            pattern.resetGeneration = 0u;
-            pattern.token = 0u;
-            pattern.kind = TrackCommandKind::Cue;
+            if (pattern.active) {
+                const int track = static_cast<int>(&pattern - armedPatterns.data());
+                publishSettlement(TransportCommandFamily::Track,
+                                  TransportSettlementOutcome::Cancelled,
+                                  pattern.token, track);
+            }
+            pattern = ArmedPattern {};
         }
-        if (!armedColumn.active ||
-            armedColumn.resetGeneration != observedResetGeneration) {
-            armedColumn = ArmedColumn {};
-        }
-        if (!armedGlobalSettings.active ||
-            armedGlobalSettings.resetGeneration != observedResetGeneration) {
-            armedGlobalSettings = ArmedGlobalSettings {};
+        for (ArmedColumn& event : armedColumns) {
+            if (!event.active || event.resetGeneration == observedResetGeneration) continue;
+            cancelTransportEvent(event);
         }
     }
 
@@ -1632,6 +2254,7 @@ struct AudioEngine::Impl {
         if (shared == nullptr) return false;
         std::unique_lock<std::mutex> lock(shared->mutex, std::try_to_lock);
         if (!lock.owns_lock()) return false;
+        if (shared->uiMutationInProgress.load(std::memory_order_acquire)) return false;
         performance.bpm = shared->app.bpm;
         performance.scaleRoot = shared->app.scaleRoot;
         performance.scaleMask = shared->app.scaleMask;
@@ -1755,8 +2378,25 @@ struct AudioEngine::Impl {
 
     bool applyArmedPattern(int track, TrackRuntime& runtime) noexcept {
         ArmedPattern& armed = armedPatterns[static_cast<std::size_t>(track)];
-        if (!armed.active || armed.kind != TrackCommandKind::Cue ||
-            armed.resetGeneration != observedResetGeneration) {
+        if (!armed.active || armed.kind != TrackCommandKind::Cue) {
+            runtime.loopBoundaryPending = false;
+            return true;
+        }
+        if (cancellationRequested(TransportCommandFamily::Track,
+                                  armed.token, track)) {
+            publishSettlement(TransportCommandFamily::Track,
+                              TransportSettlementOutcome::Cancelled,
+                              armed.token, track);
+            armed = ArmedPattern {};
+            runtime.loopBoundaryPending = false;
+            return true;
+        }
+        if (armed.resetGeneration > observedResetGeneration) return false;
+        if (armed.resetGeneration < observedResetGeneration) {
+            publishSettlement(TransportCommandFamily::Track,
+                              TransportSettlementOutcome::Cancelled,
+                              armed.token, track);
+            armed = ArmedPattern {};
             runtime.loopBoundaryPending = false;
             return true;
         }
@@ -1766,8 +2406,18 @@ struct AudioEngine::Impl {
         }
         std::unique_lock<std::mutex> lock(shared->mutex, std::try_to_lock);
         if (!lock.owns_lock()) return false;
+        if (shared->uiMutationInProgress.load(std::memory_order_acquire)) return false;
         if (resetGeneration.load(std::memory_order_acquire) != observedResetGeneration) {
             return false;
+        }
+        if (cancellationRequested(TransportCommandFamily::Track,
+                                  armed.token, track)) {
+            publishSettlement(TransportCommandFamily::Track,
+                              TransportSettlementOutcome::Cancelled,
+                              armed.token, track);
+            armed = ArmedPattern {};
+            runtime.loopBoundaryPending = false;
+            return true;
         }
 
         performance.tracks[static_cast<std::size_t>(track)] = armed.pattern;
@@ -1781,6 +2431,10 @@ struct AudioEngine::Impl {
                                 performance.tracks[static_cast<std::size_t>(track)], runtime);
         publishedPatternGenerations[static_cast<std::size_t>(track)].store(
             appliedToken, std::memory_order_release);
+        publishSettlement(TransportCommandFamily::Track,
+                          TransportSettlementOutcome::Applied,
+                          appliedToken, track,
+                          static_cast<std::uint8_t>(1u << track));
         return true;
     }
 
@@ -1847,7 +2501,19 @@ struct AudioEngine::Impl {
     bool applyImmediatePattern(int track) noexcept {
         ArmedPattern& armed = armedPatterns[static_cast<std::size_t>(track)];
         if (!armed.active || armed.kind == TrackCommandKind::Cue) return true;
-        if (armed.resetGeneration != observedResetGeneration) {
+        if (cancellationRequested(TransportCommandFamily::Track,
+                                  armed.token, track)) {
+            publishSettlement(TransportCommandFamily::Track,
+                              TransportSettlementOutcome::Cancelled,
+                              armed.token, track);
+            armed = ArmedPattern {};
+            return true;
+        }
+        if (armed.resetGeneration > observedResetGeneration) return false;
+        if (armed.resetGeneration < observedResetGeneration) {
+            publishSettlement(TransportCommandFamily::Track,
+                              TransportSettlementOutcome::Cancelled,
+                              armed.token, track);
             armed = ArmedPattern {};
             return true;
         }
@@ -1857,8 +2523,17 @@ struct AudioEngine::Impl {
         }
         std::unique_lock<std::mutex> lock(shared->mutex, std::try_to_lock);
         if (!lock.owns_lock()) return false;
+        if (shared->uiMutationInProgress.load(std::memory_order_acquire)) return false;
         if (resetGeneration.load(std::memory_order_acquire) != observedResetGeneration) {
             return false;
+        }
+        if (cancellationRequested(TransportCommandFamily::Track,
+                                  armed.token, track)) {
+            publishSettlement(TransportCommandFamily::Track,
+                              TransportSettlementOutcome::Cancelled,
+                              armed.token, track);
+            armed = ArmedPattern {};
+            return true;
         }
 
         performance.tracks[static_cast<std::size_t>(track)] = armed.pattern;
@@ -1874,6 +2549,10 @@ struct AudioEngine::Impl {
         armed = ArmedPattern {};
         publishedPatternGenerations[static_cast<std::size_t>(track)].store(
             token, std::memory_order_release);
+        publishSettlement(TransportCommandFamily::Track,
+                          TransportSettlementOutcome::Applied,
+                          token, track,
+                          static_cast<std::uint8_t>(1u << track));
         return true;
     }
 
@@ -1884,69 +2563,114 @@ struct AudioEngine::Impl {
         return true;
     }
 
-    bool applyDueColumn() noexcept {
-        if (!armedColumn.active) return true;
-        if (armedColumn.resetGeneration != observedResetGeneration) {
-            if (armedColumn.resetGeneration < observedResetGeneration) {
-                armedColumn = ArmedColumn {};
-                return true;
+    static void publishGeneration(std::atomic<std::uint64_t>& published,
+                                  std::uint64_t token) noexcept {
+        std::uint64_t previous = published.load(std::memory_order_relaxed);
+        while (previous < token &&
+               !published.compare_exchange_weak(previous, token,
+                                                std::memory_order_release,
+                                                std::memory_order_relaxed)) {
+        }
+    }
+
+    ArmedColumn* earliestTransportEvent() noexcept {
+        ArmedColumn* earliest = nullptr;
+        for (ArmedColumn& event : armedColumns) {
+            if (!event.active) continue;
+            if (event.resetGeneration < observedResetGeneration) {
+                cancelTransportEvent(event);
+                continue;
             }
-            return false;
+            if (event.resetGeneration > observedResetGeneration) continue;
+            if (earliest == nullptr || event.targetTick < earliest->targetTick) {
+                earliest = &event;
+            }
         }
+        return earliest;
+    }
+
+    bool applyDueTransportEvent() noexcept {
+        applyRequestedCancellations();
+        ArmedColumn* const due = earliestTransportEvent();
+        if (due == nullptr) return true;
         const bool running = shouldRun.load(std::memory_order_acquire);
-        if (armedColumn.kind == TrackCommandKind::Cue && running &&
-            transportTick + 1.0e-9 < armedColumn.targetTick) {
-            return true;
-        }
+        if (running && transportTick + kTickEpsilon < due->targetTick) return true;
         if (shared == nullptr ||
             resetGeneration.load(std::memory_order_acquire) != observedResetGeneration) {
             return false;
         }
         std::unique_lock<std::mutex> lock(shared->mutex, std::try_to_lock);
         if (!lock.owns_lock()) return false;
+        if (shared->uiMutationInProgress.load(std::memory_order_acquire)) return false;
         if (resetGeneration.load(std::memory_order_acquire) != observedResetGeneration) {
             return false;
         }
+        applyRequestedCancellations();
+        if (!due->active) return true;
 
-        const double boundary = running ? armedColumn.targetTick : transportTick;
+        const double boundary = running ? due->targetTick : transportTick;
+        bool changed = false;
         for (int track = 0; track < kTrackCount; ++track) {
-            if ((armedColumn.trackMask & static_cast<std::uint8_t>(1u << track)) == 0u)
+            if ((due->trackMask & static_cast<std::uint8_t>(1u << track)) == 0u)
                 continue;
             ArmedPattern& trackCommand = armedPatterns[static_cast<std::size_t>(track)];
-            if (trackCommand.active && trackCommand.order < armedColumn.order) {
+            if (trackCommand.active &&
+                trackCommand.order > due->trackOrders[static_cast<std::size_t>(track)]) {
+                const std::uint8_t trackBit = static_cast<std::uint8_t>(1u << track);
+                due->trackMask = static_cast<std::uint8_t>(
+                    due->trackMask & static_cast<std::uint8_t>(~trackBit));
+                due->trackOrders[static_cast<std::size_t>(track)] = 0u;
+                continue;
+            }
+            if (trackCommand.active &&
+                trackCommand.order < due->trackOrders[static_cast<std::size_t>(track)]) {
+                publishSettlement(TransportCommandFamily::Track,
+                                  TransportSettlementOutcome::Cancelled,
+                                  trackCommand.token, track);
                 trackCommand = ArmedPattern {};
             }
             performance.tracks[static_cast<std::size_t>(track)] =
-                armedColumn.patterns[static_cast<std::size_t>(track)];
+                due->patterns[static_cast<std::size_t>(track)];
             shared->app.tracks[static_cast<std::size_t>(track)] =
-                armedColumn.patterns[static_cast<std::size_t>(track)];
+                due->patterns[static_cast<std::size_t>(track)];
+            changed = true;
         }
-        if (armedColumn.settings.applyTempo) {
+        if (due->settings.applyTempo) {
             const std::uint16_t bpm = static_cast<std::uint16_t>(clampValue(
-                static_cast<int>(armedColumn.settings.bpm), 30, 300));
+                static_cast<int>(due->settings.bpm), 30, 300));
             performance.bpm = bpm;
             shared->app.bpm = bpm;
+            changed = true;
         }
-        if (armedColumn.settings.applyScale) {
+        if (due->settings.applyScale) {
             const std::uint8_t root =
-                static_cast<std::uint8_t>(armedColumn.settings.scaleRoot % 12u);
+                static_cast<std::uint8_t>(due->settings.scaleRoot % 12u);
             std::uint16_t mask = static_cast<std::uint16_t>(
-                armedColumn.settings.scaleMask & 0x0FFFu);
+                due->settings.scaleMask & 0x0FFFu);
             if (mask == 0u) mask = 1u;
             performance.scaleRoot = root;
             performance.scaleMask = mask;
             shared->app.scaleRoot = root;
             shared->app.scaleMask = mask;
+            changed = true;
         }
-        ++shared->app.editRevision;
+        if (changed) ++shared->app.editRevision;
         for (int track = 0; track < kTrackCount; ++track) {
-            if ((armedColumn.trackMask & static_cast<std::uint8_t>(1u << track)) == 0u)
+            if ((due->trackMask & static_cast<std::uint8_t>(1u << track)) == 0u)
                 continue;
+            const ArmedPattern& trackCommand =
+                armedPatterns[static_cast<std::size_t>(track)];
+            if (trackCommand.active &&
+                trackCommand.order > due->trackOrders[static_cast<std::size_t>(track)]) {
+                continue;
+            }
             TrackRuntime& runtime = trackRuntime[static_cast<std::size_t>(track)];
             const TrackData& data = performance.tracks[static_cast<std::size_t>(track)];
-            if (armedColumn.kind == TrackCommandKind::ImmediateReset) {
+            const TrackCommandKind kind =
+                due->trackKinds[static_cast<std::size_t>(track)];
+            if (kind == TrackCommandKind::ImmediateReset) {
                 resetOneTrack(track, data);
-            } else if (armedColumn.kind == TrackCommandKind::ImmediateInPlace) {
+            } else if (kind == TrackCommandKind::ImmediateInPlace) {
                 preserveTrackPositionForImmediateLoad(track, data);
             } else {
                 if (!running) runtime.pendingCount = 0u;
@@ -1954,53 +2678,55 @@ struct AudioEngine::Impl {
                 beginReplacementPattern(track, data, runtime);
             }
         }
-        const std::uint64_t token = armedColumn.token;
-        armedColumn = ArmedColumn {};
-        publishedColumnGeneration.store(token, std::memory_order_release);
-        return true;
-    }
-
-    bool applyDueGlobalSettings() noexcept {
-        if (!armedGlobalSettings.active) return true;
-        if (armedGlobalSettings.resetGeneration != observedResetGeneration) {
-            if (armedGlobalSettings.resetGeneration < observedResetGeneration) {
-                armedGlobalSettings = ArmedGlobalSettings {};
-                return true;
+        for (std::size_t receiptIndex = 0u;
+            receiptIndex < due->columnReceiptCount; ++receiptIndex) {
+            const ColumnReceipt& receipt = due->columnReceipts[receiptIndex];
+            if (receipt.settled) continue;
+            std::uint8_t appliedTrackMask = 0u;
+            for (int track = 0; track < kTrackCount; ++track) {
+                const std::size_t index = static_cast<std::size_t>(track);
+                const std::uint8_t trackBit = static_cast<std::uint8_t>(1u << track);
+                if ((receipt.trackMask & trackBit) != 0u &&
+                    (due->trackMask & trackBit) != 0u &&
+                    due->trackOrders[index] == receipt.order) {
+                    appliedTrackMask = static_cast<std::uint8_t>(
+                        appliedTrackMask | trackBit);
+                }
             }
-            return false;
+            const bool appliedTempo = receipt.tempo && due->settings.applyTempo &&
+                due->tempoOrder == receipt.order;
+            const bool appliedScale = receipt.scale && due->settings.applyScale &&
+                due->scaleOrder == receipt.order;
+            const bool receiptApplied = appliedTrackMask != 0u || appliedTempo || appliedScale;
+            if (receiptApplied) {
+                publishGeneration(publishedColumnGeneration, receipt.token);
+            }
+            publishSettlement(TransportCommandFamily::Column,
+                              receiptApplied ? TransportSettlementOutcome::Applied
+                                             : TransportSettlementOutcome::Cancelled,
+                              receipt.token, -1, appliedTrackMask,
+                              appliedTempo, appliedScale);
         }
-        const bool running = shouldRun.load(std::memory_order_acquire);
-        if (running && transportTick + 1.0e-9 < armedGlobalSettings.targetTick) return true;
-        if (shared == nullptr ||
-            resetGeneration.load(std::memory_order_acquire) != observedResetGeneration) {
-            return false;
+        for (std::size_t receiptIndex = 0u;
+             receiptIndex < due->globalSettingsReceiptCount; ++receiptIndex) {
+            const GlobalSettingsReceipt& receipt =
+                due->globalSettingsReceipts[receiptIndex];
+            if (receipt.settled) continue;
+            const bool appliedTempo = receipt.tempo && due->settings.applyTempo &&
+                due->tempoOrder == receipt.order;
+            const bool appliedScale = receipt.scale && due->settings.applyScale &&
+                due->scaleOrder == receipt.order;
+            const bool receiptApplied = appliedTempo || appliedScale;
+            if (receiptApplied) {
+                publishGeneration(publishedGlobalSettingsGeneration, receipt.token);
+            }
+            publishSettlement(TransportCommandFamily::GlobalSettings,
+                              receiptApplied ? TransportSettlementOutcome::Applied
+                                             : TransportSettlementOutcome::Cancelled,
+                              receipt.token, -1, 0u,
+                              appliedTempo, appliedScale);
         }
-        std::unique_lock<std::mutex> lock(shared->mutex, std::try_to_lock);
-        if (!lock.owns_lock()) return false;
-        if (resetGeneration.load(std::memory_order_acquire) != observedResetGeneration) {
-            return false;
-        }
-
-        const TimedGlobalSettings settings = armedGlobalSettings.settings;
-        if (settings.applyTempo) {
-            const std::uint16_t bpm = static_cast<std::uint16_t>(
-                clampValue(static_cast<int>(settings.bpm), 30, 300));
-            performance.bpm = bpm;
-            shared->app.bpm = bpm;
-        }
-        if (settings.applyScale) {
-            const std::uint8_t root = static_cast<std::uint8_t>(settings.scaleRoot % 12u);
-            std::uint16_t mask = static_cast<std::uint16_t>(settings.scaleMask & 0x0FFFu);
-            if (mask == 0u) mask = 1u;
-            performance.scaleRoot = root;
-            performance.scaleMask = mask;
-            shared->app.scaleRoot = root;
-            shared->app.scaleMask = mask;
-        }
-        ++shared->app.editRevision;
-        const std::uint64_t token = armedGlobalSettings.token;
-        armedGlobalSettings = ArmedGlobalSettings {};
-        publishedGlobalSettingsGeneration.store(token, std::memory_order_release);
+        *due = ArmedColumn {};
         return true;
     }
 
@@ -2014,13 +2740,16 @@ struct AudioEngine::Impl {
             const bool armedForCurrentReset =
                 armed.active && armed.kind == TrackCommandKind::Cue &&
                 armed.resetGeneration == observedResetGeneration;
-            const bool columnOwnsTrack = armedColumn.active &&
-                armedColumn.resetGeneration == observedResetGeneration &&
-                armedColumn.kind == TrackCommandKind::Cue &&
-                (armedColumn.trackMask & static_cast<std::uint8_t>(1u << track)) != 0u;
-            if (columnOwnsTrack &&
-                runtime.nextNominalTick >= armedColumn.targetTick - 1.0e-9) {
-                return;
+            const std::size_t trackIndex = static_cast<std::size_t>(track);
+            const std::uint8_t trackBit = static_cast<std::uint8_t>(1u << track);
+            for (const ArmedColumn& event : armedColumns) {
+                if (!event.active ||
+                    event.resetGeneration != observedResetGeneration ||
+                    (event.trackMask & trackBit) == 0u ||
+                    event.trackKinds[trackIndex] != TrackCommandKind::Cue) {
+                    continue;
+                }
+                if (runtime.nextNominalTick >= event.targetTick - kTickEpsilon) return;
             }
             if (runtime.loopBoundaryPending && armedForCurrentReset &&
                 runtime.nextNominalTick > transportTick + 1.0e-9) {
@@ -2425,6 +3154,7 @@ struct AudioEngine::Impl {
             drainPatternCommands();
             drainColumnCommands();
             drainGlobalSettingsCommands();
+            applyRequestedCancellations();
         }
 
         const bool running = shouldRun.load(std::memory_order_acquire);
@@ -2434,9 +3164,8 @@ struct AudioEngine::Impl {
         for (std::size_t frame = 0u; frame < frameCount; ++frame) {
             processPreviews();
             bool commandsReady = !resetDeferred;
+            if (commandsReady) commandsReady = applyDueTransportEvent();
             if (commandsReady) commandsReady = applyImmediatePatterns();
-            if (commandsReady) commandsReady = applyDueColumn();
-            if (commandsReady) commandsReady = applyDueGlobalSettings();
             const bool advanceTransport = running && commandsReady;
             if (advanceTransport) {
                 for (int track = 0; track < kTrackCount; ++track) scheduleOneTrack(track);
@@ -2534,6 +3263,7 @@ bool AudioEngine::open(SharedState& state) {
     impl_->initializePatternCommandQueue();
     impl_->initializeColumnCommandQueue();
     impl_->initializeGlobalSettingsCommandQueue();
+    impl_->initializeSettlementState();
     impl_->observedResetGeneration = impl_->resetGeneration.load(std::memory_order_relaxed);
     impl_->resetTransport();
     impl_->publishedPeakLeft.store(0.0f, std::memory_order_relaxed);
@@ -2703,6 +3433,7 @@ bool AudioEngine::queuePatternColumn(
     command.order = impl_->nextReplacementOrder.fetch_add(1u, std::memory_order_relaxed) + 1u;
     command.trackMask = trackMask;
     command.kind = TrackCommandKind::Cue;
+    command.applyImmediately = !impl_->shouldRun.load(std::memory_order_acquire);
     command.settings = settings;
     command.settings.bpm = static_cast<std::uint16_t>(
         clampValue(static_cast<int>(command.settings.bpm), 30, 300));
@@ -2740,6 +3471,7 @@ bool AudioEngine::loadPatternColumnImmediate(
     command.trackMask = trackMask;
     command.kind = mode == TrackLoadMode::Reset ? TrackCommandKind::ImmediateReset
                                                 : TrackCommandKind::ImmediateInPlace;
+    command.applyImmediately = true;
     command.settings = settings;
     command.settings.bpm = static_cast<std::uint16_t>(
         clampValue(static_cast<int>(command.settings.bpm), 30, 300));
@@ -2772,6 +3504,10 @@ bool AudioEngine::queueGlobalSettings(const TimedGlobalSettings& settings) {
     command.token = impl_->nextGlobalSettingsToken.fetch_add(
                         1u, std::memory_order_relaxed) +
                     1u;
+    command.order = impl_->nextReplacementOrder.fetch_add(
+                        1u, std::memory_order_relaxed) +
+                    1u;
+    command.applyImmediately = !impl_->shouldRun.load(std::memory_order_acquire);
     command.settings = settings;
     command.settings.bpm = static_cast<std::uint16_t>(
         clampValue(static_cast<int>(command.settings.bpm), 30, 300));
@@ -2795,6 +3531,41 @@ bool AudioEngine::queueGlobalSettings(const TimedGlobalSettings& settings) {
     return true;
 }
 
+bool AudioEngine::cancelTransportCommand(TransportCommandFamily family,
+                                         std::uint64_t token, int track) {
+    if (impl_ == nullptr || token == 0u ||
+        !impl_->isAvailable.load(std::memory_order_acquire)) {
+        return false;
+    }
+    switch (family) {
+    case TransportCommandFamily::Track:
+        if (track < 0 || track >= kTrackCount ||
+            token > impl_->submittedPatternGenerations[static_cast<std::size_t>(track)]
+                        .load(std::memory_order_acquire)) {
+            return false;
+        }
+        break;
+    case TransportCommandFamily::Column:
+        if (token > impl_->submittedColumnGeneration.load(std::memory_order_acquire)) {
+            return false;
+        }
+        track = -1;
+        break;
+    case TransportCommandFamily::GlobalSettings:
+        if (token >
+            impl_->submittedGlobalSettingsGeneration.load(std::memory_order_acquire)) {
+            return false;
+        }
+        track = -1;
+        break;
+    default:
+        return false;
+    }
+    if (impl_->settlementPublished(family, token, track)) return true;
+    impl_->requestCancellation(family, token, track);
+    return true;
+}
+
 TransportStatus AudioEngine::status() const {
     TransportStatus result;
     if (impl_ == nullptr) return result;
@@ -2812,6 +3583,9 @@ TransportStatus AudioEngine::status() const {
         result.appliedPatternGenerations[static_cast<std::size_t>(track)] =
             impl_->publishedPatternGenerations[static_cast<std::size_t>(track)].load(
                 std::memory_order_acquire);
+        result.settledPatternGenerations[static_cast<std::size_t>(track)] =
+            impl_->settledPatternGenerations[static_cast<std::size_t>(track)].load(
+                std::memory_order_acquire);
     }
     result.submittedColumnGeneration =
         impl_->submittedColumnGeneration.load(std::memory_order_acquire);
@@ -2821,6 +3595,31 @@ TransportStatus AudioEngine::status() const {
         impl_->submittedGlobalSettingsGeneration.load(std::memory_order_acquire);
     result.appliedGlobalSettingsGeneration =
         impl_->publishedGlobalSettingsGeneration.load(std::memory_order_acquire);
+    result.settledColumnGeneration =
+        impl_->settledColumnGeneration.load(std::memory_order_acquire);
+    result.settledGlobalSettingsGeneration =
+        impl_->settledGlobalSettingsGeneration.load(std::memory_order_acquire);
+    result.latestSettlementSequence =
+        impl_->latestSettlementSequence.load(std::memory_order_acquire);
+    for (std::size_t index = 0u; index < impl_->settlementSlots.size(); ++index) {
+        const SettlementSlot& slot = impl_->settlementSlots[index];
+        const std::uint64_t before = slot.sequence.load(std::memory_order_acquire);
+        if (before == 0u) continue;
+        TransportSettlement settlement;
+        settlement.sequence = before;
+        settlement.token = slot.token.load(std::memory_order_relaxed);
+        settlement.track = slot.track.load(std::memory_order_relaxed);
+        settlement.family = static_cast<TransportCommandFamily>(
+            slot.family.load(std::memory_order_relaxed));
+        settlement.outcome = static_cast<TransportSettlementOutcome>(
+            slot.outcome.load(std::memory_order_relaxed));
+        settlement.appliedTrackMask =
+            slot.appliedTrackMask.load(std::memory_order_relaxed);
+        settlement.appliedTempo = slot.appliedTempo.load(std::memory_order_relaxed);
+        settlement.appliedScale = slot.appliedScale.load(std::memory_order_relaxed);
+        const std::uint64_t after = slot.sequence.load(std::memory_order_acquire);
+        if (before == after) result.settlements[index] = settlement;
+    }
     result.peakLeft = impl_->publishedPeakLeft.load(std::memory_order_relaxed);
     result.peakRight = impl_->publishedPeakRight.load(std::memory_order_relaxed);
     result.renderedFrames = impl_->publishedFrames.load(std::memory_order_relaxed);
