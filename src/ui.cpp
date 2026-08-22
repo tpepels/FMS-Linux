@@ -1209,21 +1209,19 @@ namespace fms
 
         const char *commandName(int command) const
         {
-            static constexpr std::array<const char *, kCommandCount> names{{
-                "START / STOP", "OPEN GRID", "SYNTH BASIC", "SYNTH DEEP",
-                "DATA PERFORM", "DATA MANAGE", "SOUND PALETTE", "GRID COMPARE",
-                "PROJECT ACTIONS", "SAVE PROJECT", "CONTEXT HINTS", "QUICK START GUIDE"}};
+            static constexpr std::array<const char *, kCommandCount> names{{"START / STOP", "OPEN GRID", "SYNTH BASIC", "SYNTH DEEP",
+                                                                            "DATA PERFORM", "DATA MANAGE", "SOUND PALETTE", "GRID COMPARE",
+                                                                            "PROJECT ACTIONS", "SAVE PROJECT", "CONTEXT HINTS", "QUICK START GUIDE"}};
             return names[static_cast<std::size_t>(clampInt(command, 0, kCommandCount - 1))];
         }
 
         const char *commandDescription(int command) const
         {
-            static constexpr std::array<const char *, kCommandCount> descriptions{{
-                "SPACE - TOGGLE THE SEQUENCER", "RETURN TO STEP EDITING", "AMBIENT MACROS AND ROUTING",
-                "GROUPED ACCESS TO ALL 50 FIELDS", "LOAD AND QUEUE PATTERNS", "NAME, COLOR, LOCK, AND CURATE",
-                "RECALL OR STORE FM / NOISE SOUNDS", "SHOW ONE FIELD ACROSS TRACKS",
-                "NEW, CLEAR, SAVE AS, OR OPEN", "WRITE THE ACTIVE PROJECT", "TOGGLE THE LEARNING INSPECTOR",
-                "REOPEN THE FOUR-STEP LOOP WALKTHROUGH"}};
+            static constexpr std::array<const char *, kCommandCount> descriptions{{"SPACE - TOGGLE THE SEQUENCER", "RETURN TO STEP EDITING", "AMBIENT MACROS AND ROUTING",
+                                                                                   "GROUPED ACCESS TO ALL 50 FIELDS", "LOAD AND QUEUE PATTERNS", "NAME, COLOR, LOCK, AND CURATE",
+                                                                                   "RECALL OR STORE FM / NOISE SOUNDS", "SHOW ONE FIELD ACROSS TRACKS",
+                                                                                   "NEW, CLEAR, SAVE AS, OR OPEN", "WRITE THE ACTIVE PROJECT", "TOGGLE THE LEARNING INSPECTOR",
+                                                                                   "REOPEN THE FOUR-STEP LOOP WALKTHROUGH"}};
             return descriptions[static_cast<std::size_t>(clampInt(command, 0, kCommandCount - 1))];
         }
 
@@ -1313,7 +1311,7 @@ namespace fms
         }
 
         AsyncHistorySettlement asyncSettlement(const AsyncHistoryTransaction &transaction,
-                                                const TransportStatus &status) const
+                                               const TransportStatus &status) const
         {
             AsyncHistorySettlement result;
             const TransportCommandFamily family = asyncFamily(transaction);
@@ -1332,7 +1330,7 @@ namespace fms
                 result.trackMask = family == TransportCommandFamily::Track
                                        ? transaction.trackMask
                                        : static_cast<std::uint8_t>(settlement.appliedTrackMask &
-                                                                    transaction.trackMask);
+                                                                   transaction.trackMask);
                 result.tempo = settlement.appliedTempo && transaction.tempo;
                 result.scale = settlement.appliedScale && transaction.scale;
             }
@@ -1961,7 +1959,7 @@ namespace fms
                                              .steps[static_cast<std::size_t>(selectedStep)]
                                              .active;
                 if (willDisable && !confirmDestructiveEdit(kTrackCount * kStepCount,
-                                                            "DISABLE ALL"))
+                                                           "DISABLE ALL"))
                     return;
             }
             Step preview;
@@ -3351,7 +3349,8 @@ namespace fms
                 }
             }
             toast(locked ? "BANK LOCKED - COLOR REJECTED"
-                         : "PATTERN COLOR " + decimalValue(color), locked);
+                         : "PATTERN COLOR " + decimalValue(color),
+                  locked);
         }
 
         void storeRecallBankSetting(bool tempo, bool store, bool timed)
@@ -3433,9 +3432,8 @@ namespace fms
 
         static constexpr int kSynthParameterCount = 50;
         static constexpr int kSynthMacroCount = 12;
-        static constexpr std::array<const char *, kSynthMacroCount> kSynthMacroNames{{
-            "ENGINE", "ALGORITHM", "TIMBRE", "ATTACK", "RELEASE", "CUTOFF",
-            "RESONANCE", "MOTION RATE", "MOTION DEPTH", "DRIVE", "DETUNE", "SPACE"}};
+        static constexpr std::array<const char *, kSynthMacroCount> kSynthMacroNames{{"ENGINE", "ALGORITHM", "TIMBRE", "ATTACK", "RELEASE", "CUTOFF",
+                                                                                      "RESONANCE", "MOTION RATE", "MOTION DEPTH", "DRIVE", "DETUNE", "SPACE"}};
         static constexpr std::array<const char *, kSynthMacroCount> kSynthMacroDescriptions{{
             "SWITCHES BETWEEN CLASSIC 2-OP AND RICH 4-OP FM",
             "CHANGES WHICH OPERATORS MODULATE AND REACH OUTPUT",
@@ -3453,8 +3451,7 @@ namespace fms
 
         int synthMacroParameter() const
         {
-            static constexpr std::array<int, kSynthMacroCount> primaryParameters{{
-                0, 1, 8, 22, 25, 27, 28, 35, 36, 30, 32, 33}};
+            static constexpr std::array<int, kSynthMacroCount> primaryParameters{{0, 1, 8, 22, 25, 27, 28, 35, 36, 30, 32, 33}};
             return primaryParameters[static_cast<std::size_t>(
                 clampInt(synthMacroCursor, 0, kSynthMacroCount - 1))];
         }
@@ -5074,7 +5071,7 @@ namespace fms
                 const bool compactDismiss =
                     x >= 1124.0f && x < 1234.0f && y >= 596.0f && y < 620.0f;
                 const bool inspectorDismiss = wideHintInspector && !hintPanelVisible &&
-                    x >= 1494.0f && x < 1604.0f && y >= 286.0f && y < 310.0f;
+                                              x >= 1494.0f && x < 1604.0f && y >= 286.0f && y < 310.0f;
                 if (compactDismiss || inspectorDismiss)
                 {
                     dismissOnboarding();
@@ -5556,7 +5553,8 @@ namespace fms
 
             const auto &sounds = lastPaletteNoise ? app.noisePalette : app.fmPalette;
             const int paletteReady = static_cast<int>(std::count_if(
-                sounds.begin(), sounds.end(), [](const Step &sound) { return sound.active; }));
+                sounds.begin(), sounds.end(), [](const Step &sound)
+                { return sound.active; }));
             const std::string snapshotBadge = snapshot.has_value()
                                                   ? (snapshotSide ? "S-B" : "S-A")
                                                   : "S--";
@@ -5739,23 +5737,23 @@ namespace fms
                         drawLine(renderer, x + 31, y + 12, x + 37, y + 12, palette.faint);
                     }
 
-                          const int comparedParameter = gridCompareValues
-                                             ? gridParamIndex(trackIndex, parameter)
-                                             : -1;
-                          const GridParam shown = comparedParameter >= 0
-                                        ? parameter
-                                        : (selected ? parameter
-                                                 : (trackIndex == kTrackCount - 1
-                                                     ? GridParam::NoiseRate
-                                                     : GridParam::Note));
+                    const int comparedParameter = gridCompareValues
+                                                      ? gridParamIndex(trackIndex, parameter)
+                                                      : -1;
+                    const GridParam shown = comparedParameter >= 0
+                                                ? parameter
+                                                : (selected ? parameter
+                                                            : (trackIndex == kTrackCount - 1
+                                                                   ? GridParam::NoiseRate
+                                                                   : GridParam::Note));
                     const Color valueColor = step.active && inLength ? palette.text : palette.muted;
-                          const char *shownLabel = comparedParameter >= 0
-                                        ? gridParamItem(trackIndex, comparedParameter).shortName
-                                        : (selected
-                                                 ? gridParamItem(trackIndex, clampInt(selectedParameter, 0,
-                                                                                      gridParamCount(trackIndex) - 1))
-                                                       .shortName
-                                        : (trackIndex == kTrackCount - 1 ? "RATE" : "NOTE"));
+                    const char *shownLabel = comparedParameter >= 0
+                                                 ? gridParamItem(trackIndex, comparedParameter).shortName
+                                                 : (selected
+                                                        ? gridParamItem(trackIndex, clampInt(selectedParameter, 0,
+                                                                                             gridParamCount(trackIndex) - 1))
+                                                              .shortName
+                                                        : (trackIndex == kTrackCount - 1 ? "RATE" : "NOTE"));
                     drawText(renderer, x + 49, y + 8, shownLabel,
                              cursor ? palette.accent : palette.faint, 1);
                     drawText(renderer, x + 94, y + 6, gridValue(step, shown, trackIndex == 4), valueColor, 2);
@@ -5804,8 +5802,7 @@ namespace fms
             };
             drawRow(0, stepCount, 622, "STEP");
             drawRow(stepCount, totalCount - stepCount, 681, selectedTrack == 4 ? "PSG" : "SYNTH");
-            drawText(renderer, 28, 748, std::string("F5 SCOPE ") + scopeName() +
-                          (gridCompareValues ? "   F9 COMPARE" : ""), palette.accent, 1);
+            drawText(renderer, 28, 748, std::string("F5 SCOPE ") + scopeName() + (gridCompareValues ? "   F9 COMPARE" : ""), palette.accent, 1);
             drawTextRight(renderer, 1252, 748,
                           "SHIFT+ARROWS RANGE   C/X/V COPY CUT PASTE   P PALETTE   R NUDGE",
                           palette.muted, 1);
@@ -5825,9 +5822,7 @@ namespace fms
 
             const int nodeWidth = 62;
             const int nodeHeight = 38;
-            const std::array<SDL_Point, 4> nodes{{
-                {x + 48, y + height - 76}, {x + 48, y + height - 152},
-                {x + 184, y + height - 152}, {x + 184, y + height - 228}}};
+            const std::array<SDL_Point, 4> nodes{{{x + 48, y + height - 76}, {x + 48, y + height - 152}, {x + 184, y + height - 152}, {x + 184, y + height - 228}}};
             const int railX = x + width - 72;
             const int outputY = y + height - 58;
             drawLine(renderer, railX, y + 58, railX, outputY, palette.lineStrong);
@@ -6358,8 +6353,7 @@ namespace fms
 
             const auto &currentBank = app.banks[static_cast<std::size_t>(dataBank)];
             const std::string bankName(currentBank.name.data(), 4);
-            static constexpr std::array<const char *, 7> ribbonLabels{{
-                "LOAD", "QUEUE", "SAVE", "CLEAR", "RANDOM", "TARGET", "MODE"}};
+            static constexpr std::array<const char *, 7> ribbonLabels{{"LOAD", "QUEUE", "SAVE", "CLEAR", "RANDOM", "TARGET", "MODE"}};
             constexpr int ribbonLeft = 28;
             constexpr int ribbonWidth = 174;
             for (int action = 0; action < 7; ++action)
@@ -6373,13 +6367,20 @@ namespace fms
                 drawText(renderer, x + 12, 192, ribbonLabels[static_cast<std::size_t>(action)],
                          action == 1 || stateAction ? palette.accent : palette.text, 1);
                 std::string detail;
-                if (action == 0) detail = "ENTER";
-                else if (action == 1) detail = "Q";
-                else if (action == 2) detail = "SHIFT+ENTER";
-                else if (action == 3) detail = "X / CONFIRM";
-                else if (action == 4) detail = "R";
-                else if (action == 5) detail = dataAllTracks ? "ALL 5" : "TRACK";
-                else detail = dataLoadMode == DataLoadMode::Reset ? "RESET" : "IN PLACE";
+                if (action == 0)
+                    detail = "ENTER";
+                else if (action == 1)
+                    detail = "Q";
+                else if (action == 2)
+                    detail = "SHIFT+ENTER";
+                else if (action == 3)
+                    detail = "X / CONFIRM";
+                else if (action == 4)
+                    detail = "R";
+                else if (action == 5)
+                    detail = dataAllTracks ? "ALL 5" : "TRACK";
+                else
+                    detail = dataLoadMode == DataLoadMode::Reset ? "RESET" : "IN PLACE";
                 drawText(renderer, x + 12, 212, detail,
                          stateAction ? palette.text : palette.muted, 1);
             }
@@ -6403,7 +6404,8 @@ namespace fms
                 for (int track = first; track <= last; ++track)
                 {
                     occupied = occupied && app.patterns[static_cast<std::size_t>(track)]
-                                                       [static_cast<std::size_t>(pattern)].occupied;
+                                                       [static_cast<std::size_t>(pattern)]
+                                                           .occupied;
                     queued = queued || queuedPattern[static_cast<std::size_t>(track)] == pattern;
                 }
                 const bool selected = dataBank == bank && dataColumn == column;
@@ -6824,7 +6826,8 @@ namespace fms
                 if (y >= 180.0f && y < 234.0f)
                 {
                     const int action = clampInt(static_cast<int>((x - 28.0f) / 174.0f), 0, 6);
-                    return std::string(commandDescription(action == 0 ? 4 : action == 1 ? 4 : 5));
+                    return std::string(commandDescription(action == 0 ? 4 : action == 1 ? 4
+                                                                                        : 5));
                 }
                 if (y >= 260.0f && y < 572.0f)
                     return "PATTERN SLOT / CLICK LOADS, SHIFT+CLICK SAVES, RIGHT CLICK QUEUES";
@@ -7069,9 +7072,8 @@ namespace fms
             const std::array<bool, 4> complete{{onboardingStartedTransport, onboardingPlacedStep,
                                                 onboardingChangedSound, onboardingSavedPattern}};
             static constexpr std::array<const char *, 4> keys{{"SPACE", "GRID / ENTER", "SYNTH BASIC", "DATA / SHIFT+ENTER"}};
-            static constexpr std::array<const char *, 4> descriptions{{
-                "START THE TRANSPORT", "PLACE OR TOGGLE A STEP", "TURN MOTION, RELEASE, OR SPACE",
-                "SAVE THE PATTERN SLOT"}};
+            static constexpr std::array<const char *, 4> descriptions{{"START THE TRANSPORT", "PLACE OR TOGGLE A STEP", "TURN MOTION, RELEASE, OR SPACE",
+                                                                       "SAVE THE PATTERN SLOT"}};
             for (int item = 0; item < 4; ++item)
             {
                 const int rowY = y + 76 + item * 36;

@@ -381,9 +381,9 @@ int main()
         for (int algorithm = 0; algorithm < 12; ++algorithm)
         {
             topologyMatchesDsp = topologyMatchesDsp &&
-                fms::advancedFmAlgorithmTopology(
-                    static_cast<fms::AdvancedFmAlgorithm>(algorithm)) ==
-                    expectedTopologies[static_cast<std::size_t>(algorithm)];
+                                 fms::advancedFmAlgorithmTopology(
+                                     static_cast<fms::AdvancedFmAlgorithm>(algorithm)) ==
+                                     expectedTopologies[static_cast<std::size_t>(algorithm)];
         }
         okay &= check(topologyMatchesDsp,
                       "all 12 Basic routing diagrams match DSP modulation edges and carriers");
@@ -660,18 +660,16 @@ int main()
         key(ui, SDL_SCANCODE_RETURN);
         key(ui, SDL_SCANCODE_C);
         okay &= check(readState(shared, [](const fms::AppState &app)
-                                {
-                           return std::strncmp(app.patternMetadata[0].name.data(), "DRIFT", 5) == 0 &&
-                                  app.patternMetadata[0].color == 2; }),
+                                { return std::strncmp(app.patternMetadata[0].name.data(), "DRIFT", 5) == 0 &&
+                                         app.patternMetadata[0].color == 2; }),
                       "Data Manage persists a shared short name and color for a whole-column slot");
         key(ui, SDL_SCANCODE_K);
         key(ui, SDL_SCANCODE_E);
         textInput(ui, "BLOCKED");
         key(ui, SDL_SCANCODE_C);
         okay &= check(readState(shared, [](const fms::AppState &app)
-                                {
-                           return std::strncmp(app.patternMetadata[0].name.data(), "DRIFT", 5) == 0 &&
-                                  app.patternMetadata[0].color == 2; }),
+                                { return std::strncmp(app.patternMetadata[0].name.data(), "DRIFT", 5) == 0 &&
+                                         app.patternMetadata[0].color == 2; }),
                       "bank lock protects pattern names and colors as well as pattern data");
         key(ui, SDL_SCANCODE_K);
         key(ui, SDL_SCANCODE_LEFT); // Return to ? for the existing bank flow.
@@ -799,7 +797,7 @@ int main()
         ui.update(0.08);
         okay &= check(readState(shared, [](const fms::AppState &app)
                                 { return app.tracks[0].steps[0].note == 43; }) &&
-                           !ui.isDirty(),
+                          !ui.isDirty(),
                       "undo before apply cancels the cue and restores its scoped state deterministically");
 
         // Queue acceptance participates in the same chronological action
@@ -816,7 +814,7 @@ int main()
         key(ui, SDL_SCANCODE_Z, KMOD_CTRL);
         okay &= check(readState(shared, [](const fms::AppState &app)
                                 { return app.bpm == 30 && app.tracks[0].steps[0].note == 43; }) &&
-                           ui.isDirty(),
+                          ui.isDirty(),
                       "Undo first reverts a later BPM edit while leaving the earlier cue pending");
         key(ui, SDL_SCANCODE_Z, KMOD_CTRL);
         okay &= check(waitUntil(ui, [&]
@@ -851,14 +849,14 @@ int main()
         okay &= check(readState(shared, [queuedTrackRate](const fms::AppState &app)
                                 { return app.tracks[0].rateIndex == queuedTrackRate &&
                                          app.tracks[0].steps[0].note == 43; }) &&
-                           ui.isDirty(),
+                          ui.isDirty(),
                       "Undo first restores the later same-track edit while the cue stays pending");
         key(ui, SDL_SCANCODE_Z, KMOD_CTRL);
         okay &= check(waitUntil(ui, [&]
                                 { return !ui.isDirty(); }) &&
-                           readState(shared, [queuedTrackRate](const fms::AppState &app)
-                                     { return app.tracks[0].rateIndex == queuedTrackRate &&
-                                              app.tracks[0].steps[0].note == 43; }),
+                          readState(shared, [queuedTrackRate](const fms::AppState &app)
+                                    { return app.tracks[0].rateIndex == queuedTrackRate &&
+                                             app.tracks[0].steps[0].note == 43; }),
                       "cancelling an unapplied cue leaves later same-track history intact");
 
         // Redo order remains chronological when an unavailable cue marker
@@ -869,9 +867,8 @@ int main()
             audio.status().submittedPatternGenerations[0];
         key(ui, SDL_SCANCODE_Z, KMOD_CTRL);
         okay &= check(waitUntil(ui, [&]
-                                {
-                           return audio.status().settledPatternGenerations[0] >=
-                                  redoOrderCue; }),
+                                { return audio.status().settledPatternGenerations[0] >=
+                                         redoOrderCue; }),
                       "newest pending cue can be cancelled above an older ordinary edit");
         key(ui, SDL_SCANCODE_Z, KMOD_CTRL);
         okay &= check(readState(shared, [](const fms::AppState &app)
@@ -898,7 +895,7 @@ int main()
         while (std::chrono::steady_clock::now() < appliedWithoutUiDeadline)
         {
             appliedWithoutUiUpdate = readState(shared, [](const fms::AppState &app)
-                                                { return app.tracks[0].steps[0].note == 101; });
+                                               { return app.tracks[0].steps[0].note == 101; });
             if (appliedWithoutUiUpdate)
                 break;
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
@@ -950,13 +947,11 @@ int main()
                       "future track cue applies after an interleaved edit");
         key(ui, SDL_SCANCODE_Z, KMOD_CTRL);
         okay &= check(readState(shared, [](const fms::AppState &app)
-                                {
-                           return app.tracks[0].steps[0].note == 44 && app.bpm == 299; }),
+                                { return app.tracks[0].steps[0].note == 44 && app.bpm == 299; }),
                       "undoing an applied cue preserves the unrelated interleaved BPM edit");
         key(ui, SDL_SCANCODE_Z, static_cast<SDL_Keymod>(KMOD_CTRL | KMOD_SHIFT));
         okay &= check(readState(shared, [](const fms::AppState &app)
-                                {
-                           return app.tracks[0].steps[0].note == 102 && app.bpm == 299; }),
+                                { return app.tracks[0].steps[0].note == 102 && app.bpm == 299; }),
                       "redo reapplies only the queued track effect after interleaving");
         audio.setRunning(false);
 
@@ -1041,8 +1036,8 @@ int main()
         dropFile(ui, droppedPath);
         fms::ProjectRequest dropRequest;
         okay &= check(ui.consumeProjectRequest(dropRequest) &&
-                           dropRequest.kind == fms::ProjectRequestKind::Open &&
-                           dropRequest.path == droppedPath,
+                          dropRequest.kind == fms::ProjectRequestKind::Open &&
+                          dropRequest.path == droppedPath,
                       "dropping an arbitrary .fms path emits an exact Open request");
         okay &= check(readState(shared, [beforeDrop](const fms::AppState &app)
                                 { return app.editRevision == beforeDrop; }),
@@ -1050,8 +1045,8 @@ int main()
         dropFile(ui, "");
         fms::ProjectRequest emptyDropRequest;
         okay &= check(!ui.consumeProjectRequest(emptyDropRequest) &&
-                           readState(shared, [beforeDrop](const fms::AppState &app)
-                                     { return app.editRevision == beforeDrop; }),
+                          readState(shared, [beforeDrop](const fms::AppState &app)
+                                    { return app.editRevision == beforeDrop; }),
                       "empty drop is reported without a request or project mutation");
         {
             std::lock_guard<std::mutex> lock(shared.mutex);
@@ -1062,7 +1057,7 @@ int main()
         ui.projectLoaded(droppedPath);
         okay &= check(readState(shared, [](const fms::AppState &app)
                                 { return app.bpm == 166; }) &&
-                           !audio.status().running && !ui.isDirty(),
+                          !audio.status().running && !ui.isDirty(),
                       "projectLoaded preserves the host-installed state and publishes a stopped reset boundary");
         {
             std::lock_guard<std::mutex> lock(shared.mutex);
@@ -1078,13 +1073,12 @@ int main()
         key(ui, SDL_SCANCODE_RETURN);
         fms::ProjectRequest newRequest;
         okay &= check(ui.consumeProjectRequest(newRequest) &&
-                           newRequest.kind == fms::ProjectRequestKind::New &&
-                           newRequest.path.empty(),
+                          newRequest.kind == fms::ProjectRequestKind::New &&
+                          newRequest.path.empty(),
                       "confirmed Project New emits a deferred host request");
         okay &= check(readState(shared, [](const fms::AppState &app)
-                                {
-                           return app.bpm == 211 && app.scaleRoot == 8 &&
-                                  app.scaleMask == 0x0AAAu && !app.controller.enabled; }),
+                                { return app.bpm == 211 && app.scaleRoot == 8 &&
+                                         app.scaleMask == 0x0AAAu && !app.controller.enabled; }),
                       "New request leaves current work untouched until recovery succeeds");
         {
             std::lock_guard<std::mutex> lock(shared.mutex);
@@ -1100,12 +1094,11 @@ int main()
         }
         ui.projectStarted("/tmp/fms-ui-untitled.fms");
         okay &= check(readState(shared, [](const fms::AppState &app)
-                                {
-                           return app.bpm == 120 && app.scaleRoot == 0 && app.scaleMask == 0x0FFF &&
-                                  app.tracks[0].steps[0].active && app.patterns[0][0].occupied &&
-                                  !app.patterns[0][1].occupied && !app.controller.enabled &&
-                                  app.onboardingDismissed; }) &&
-                           ui.isDirty(),
+                                { return app.bpm == 120 && app.scaleRoot == 0 && app.scaleMask == 0x0FFF &&
+                                         app.tracks[0].steps[0].active && app.patterns[0][0].occupied &&
+                                         !app.patterns[0][1].occupied && !app.controller.enabled &&
+                                         app.onboardingDismissed; }) &&
+                          ui.isDirty(),
                       "host-installed New starts from the starter session, preserves preferences, and is unsaved");
         key(ui, SDL_SCANCODE_Z, KMOD_CTRL);
         okay &= check(readState(shared, [](const fms::AppState &app)
@@ -1139,8 +1132,7 @@ int main()
                                     for (const auto &step : app.tracks[0].steps)
                                         if (step.active)
                                             return false;
-                                    return true;
-                                }),
+                                    return true; }),
                       "confirmed broad clear applies to the active track");
         key(ui, SDL_SCANCODE_F5); // All scope.
         key(ui, SDL_SCANCODE_F5); // Selection scope.
@@ -1152,11 +1144,11 @@ int main()
         key(ui, SDL_SCANCODE_RETURN);
         fms::ProjectRequest saveAsRequest;
         okay &= check(ui.consumeProjectRequest(saveAsRequest) &&
-                           saveAsRequest.kind == fms::ProjectRequestKind::SaveAs &&
-                           saveAsRequest.path.find("flow-state") != std::string::npos &&
-                           saveAsRequest.path.size() >= 4u &&
-                           saveAsRequest.path.substr(saveAsRequest.path.size() - 4u) == ".fms",
-                       "Ctrl+Shift+S emits a sanitized Save As project request");
+                          saveAsRequest.kind == fms::ProjectRequestKind::SaveAs &&
+                          saveAsRequest.path.find("flow-state") != std::string::npos &&
+                          saveAsRequest.path.size() >= 4u &&
+                          saveAsRequest.path.substr(saveAsRequest.path.size() - 4u) == ".fms",
+                      "Ctrl+Shift+S emits a sanitized Save As project request");
         key(ui, SDL_SCANCODE_N, KMOD_CTRL);
         key(ui, SDL_SCANCODE_DOWN);
         key(ui, SDL_SCANCODE_DOWN);
